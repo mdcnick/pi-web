@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import type { AgentSession, AgentSessionRuntime } from "@mariozechner/pi-coding-agent";
+import type { AgentSession, AgentSessionRuntime } from "@earendil-works/pi-coding-agent";
 import type { SessionEventHub } from "../realtime/sessionEventHub.js";
 import type { ClientCommandResult, ClientSession } from "../types.js";
 import { isBuiltinCommand } from "./builtinCommands.js";

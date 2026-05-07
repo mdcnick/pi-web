@@ -1,4 +1,4 @@
-import type { AgentSessionRuntime } from "@mariozechner/pi-coding-agent";
+import type { AgentSessionRuntime } from "@earendil-works/pi-coding-agent";
 
 export interface ActiveSession {
   runtime: AgentSessionRuntime;

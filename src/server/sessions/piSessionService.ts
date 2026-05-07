@@ -8,7 +8,7 @@ import {
   SessionManager,
   type AgentSession,
   type CreateAgentSessionRuntimeFactory,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import type { ClientCommand, ClientCommandResult, ClientMessagePage, ClientSession, ClientSessionStatus } from "../types.js";
 import type { SessionEventHub } from "../realtime/sessionEventHub.js";
 import { BUILTIN_COMMANDS } from "./builtinCommands.js";
