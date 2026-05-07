@@ -35,6 +35,8 @@ export function groupChatMessages(messages: ChatLine[], indexOffset = 0): ChatGr
 }
 
 export function summarizeChatGroup(messages: ChatLine[]): string {
+  if (messages.every((message) => message.source === "compaction")) return `${String(messages.length)} history compaction ${messages.length === 1 ? "summary" : "summaries"}`;
+  if (messages.every((message) => message.source === "branch_summary")) return `${String(messages.length)} branch ${messages.length === 1 ? "summary" : "summaries"}`;
   const counts = messages.reduce<Record<string, number>>((acc, message) => {
     acc[message.role] = (acc[message.role] ?? 0) + 1;
     return acc;
@@ -44,5 +46,6 @@ export function summarizeChatGroup(messages: ChatLine[]): string {
 }
 
 function isReadablePart(message: ChatLine, part: ChatPart): boolean {
+  if (message.source === "compaction" || message.source === "branch_summary") return false;
   return part.type === "text" && (message.role === "user" || message.role === "assistant" || message.role === "system" || message.role === "bash");
 }

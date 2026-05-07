@@ -308,8 +308,8 @@ function historyMessages(session: AgentSession): unknown[] {
   for (const entry of session.sessionManager.getBranch()) {
     if (entry.type === "message") messages.push(entry.message);
     else if (entry.type === "custom_message" && entry.display) messages.push({ role: "custom", content: entry.content, customType: entry.customType, details: entry.details });
-    else if (entry.type === "compaction") messages.push({ role: "system", content: `Compacted history:\n\n${entry.summary}` });
-    else if (entry.type === "branch_summary") messages.push({ role: "system", content: `Branch summary:\n\n${entry.summary}` });
+    else if (entry.type === "compaction") messages.push({ role: "system", source: "compaction", content: `Compacted history:\n\n${entry.summary}` });
+    else if (entry.type === "branch_summary") messages.push({ role: "system", source: "branch_summary", content: `Branch summary:\n\n${entry.summary}` });
   }
   return messages;
 }

@@ -24,10 +24,17 @@ function normalizeMessage(message: unknown): ChatLine[] {
   if (getString(message, "role") === "bashExecution") return [normalizeBashExecution(message)];
   const role = normalizeRole(getString(message, "role"));
   const parts = normalizeContent(getProperty(message, "content"), message);
-  if (role === "tool") return [{ role, parts }];
+  const source = normalizeSource(message, parts);
+  if (role === "tool") return [{ role, parts, ...(source === undefined ? {} : { source }) }];
 
   const visible = parts.filter((part) => part.type !== "empty");
-  return visible.length > 0 ? [{ role, parts: visible }] : [];
+  return visible.length > 0 ? [{ role, parts: visible, ...(source === undefined ? {} : { source }) }] : [];
+}
+
+function normalizeSource(message: unknown, _parts: ChatPart[]): ChatLine["source"] | undefined {
+  const source = getString(message, "source");
+  if (source === "compaction" || source === "branch_summary") return source;
+  return undefined;
 }
 
 function normalizeBashExecution(message: unknown): ChatLine {

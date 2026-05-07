@@ -10,6 +10,7 @@ export type ChatPart =
 export interface ChatLine {
   role: "user" | "assistant" | "tool" | "system" | "bash";
   parts: ChatPart[];
+  source?: "compaction" | "branch_summary";
 }
 
 export interface CompletionItem {
