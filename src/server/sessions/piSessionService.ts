@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import {
   AuthStorage,
   createAgentSessionFromServices,
@@ -13,44 +12,13 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import type { ClientCommand, ClientCommandResult, ClientSession, ClientSessionStatus } from "../types.js";
 import type { SessionEventHub } from "../realtime/sessionEventHub.js";
-
-interface ActiveSession {
-  runtime: AgentSessionRuntime;
-  unsubscribe: () => void;
-}
-
-interface PendingCommandSelect {
-  sessionId: string;
-  command: "fork";
-}
-
-const BUILTIN_COMMANDS: ClientCommand[] = [
-  { name: "settings", description: "Open settings menu", source: "builtin" },
-  { name: "model", description: "Select model", source: "builtin" },
-  { name: "scoped-models", description: "Enable/disable models for cycling", source: "builtin" },
-  { name: "export", description: "Export session", source: "builtin" },
-  { name: "import", description: "Import and resume a session from JSONL", source: "builtin" },
-  { name: "share", description: "Share session as a secret GitHub gist", source: "builtin" },
-  { name: "copy", description: "Copy last agent message", source: "builtin" },
-  { name: "name", description: "Set session display name", source: "builtin" },
-  { name: "session", description: "Show session info and stats", source: "builtin" },
-  { name: "changelog", description: "Show changelog entries", source: "builtin" },
-  { name: "hotkeys", description: "Show keyboard shortcuts", source: "builtin" },
-  { name: "fork", description: "Create a new fork from a previous user message", source: "builtin" },
-  { name: "clone", description: "Duplicate current session at current position", source: "builtin" },
-  { name: "tree", description: "Navigate session tree", source: "builtin" },
-  { name: "login", description: "Configure provider authentication", source: "builtin" },
-  { name: "logout", description: "Remove provider authentication", source: "builtin" },
-  { name: "new", description: "Start a new session", source: "builtin" },
-  { name: "compact", description: "Manually compact session context", source: "builtin" },
-  { name: "resume", description: "Resume a different session", source: "builtin" },
-  { name: "reload", description: "Reload keybindings, extensions, skills, prompts, and themes", source: "builtin" },
-  { name: "quit", description: "Quit pi", source: "builtin" },
-];
+import { BUILTIN_COMMANDS } from "./builtinCommands.js";
+import { SessionCommandService } from "./sessionCommandService.js";
+import type { ActiveSession } from "./sessionRuntimeStore.js";
 
 export class PiSessionService {
   private readonly active = new Map<string, ActiveSession>();
-  private readonly pendingSelects = new Map<string, PendingCommandSelect>();
+  private readonly commandService: SessionCommandService;
   private readonly agentDir = getAgentDir();
   private readonly authStorage = AuthStorage.create();
   private readonly modelRegistry = ModelRegistry.create(this.authStorage);
@@ -60,7 +28,13 @@ export class PiSessionService {
     return { ...result, services, diagnostics: services.diagnostics };
   };
 
-  constructor(private readonly events: SessionEventHub) {}
+  constructor(private readonly events: SessionEventHub) {
+    this.commandService = new SessionCommandService(
+      (sessionId) => this.getActive(sessionId),
+      (sessionId, text) => this.prompt(sessionId, text),
+      events,
+    );
+  }
 
   async list(cwd: string): Promise<ClientSession[]> {
     const sessions = await SessionManager.list(cwd);
@@ -122,65 +96,11 @@ export class PiSessionService {
   }
 
   async runCommand(sessionId: string, text: string): Promise<ClientCommandResult> {
-    const active = await this.getActive(sessionId);
-    const session = active.runtime.session;
-    const [name = "", ...args] = text.trim().replace(/^\//, "").split(/\s+/);
-    const rest = args.join(" ").trim();
-
-    if (!BUILTIN_COMMANDS.some((command) => command.name === name)) {
-      if (this.isRuntimeCommand(session, name)) {
-        await this.prompt(sessionId, text);
-        return { type: "done", message: `Accepted ${text}` };
-      }
-      return { type: "unsupported", message: `Unknown command: /${name}` };
-    }
-
-    if (name === "session") return { type: "done", message: this.formatSessionStats(session) };
-    if (name === "name") {
-      if (!rest) return { type: "unsupported", message: "Usage: /name <session name>" };
-      session.setSessionName(rest);
-      return { type: "done", message: `Session named ${rest}` };
-    }
-    if (name === "compact") {
-      void session.compact(rest || undefined).catch((error) => {
-        this.events.publish(session.sessionId, { type: "session.error", message: error instanceof Error ? error.message : String(error) });
-      });
-      return { type: "done", message: "Compaction started" };
-    }
-    if (name === "clone") {
-      const leafId = session.sessionManager.getLeafId();
-      if (!leafId) return { type: "unsupported", message: "Cannot clone: no current session entry" };
-      const result = await active.runtime.fork(leafId, { position: "at" });
-      if (result.cancelled) return { type: "done", message: "Clone cancelled" };
-      return { type: "done", message: "Session cloned", session: this.clientSessionFromRuntime(active.runtime) };
-    }
-    if (name === "fork") {
-      const messages = session.getUserMessagesForForking();
-      if (!messages.length) return { type: "unsupported", message: "No user messages to fork from" };
-      const requestId = crypto.randomUUID();
-      this.pendingSelects.set(requestId, { sessionId: session.sessionId, command: "fork" });
-      return {
-        type: "select",
-        requestId,
-        title: "Fork from message",
-        options: messages.map((message) => ({ value: message.entryId, label: truncate(message.text, 140) })),
-      };
-    }
-
-    return { type: "unsupported", message: `/${name} is not implemented in the web UI yet` };
+    return this.commandService.run(sessionId, text);
   }
 
   async respondToCommand(sessionId: string, requestId: string, value: string): Promise<ClientCommandResult> {
-    const pending = this.pendingSelects.get(requestId);
-    if (!pending || pending.sessionId !== sessionId) return { type: "unsupported", message: "Command request expired" };
-    this.pendingSelects.delete(requestId);
-    const active = await this.getActive(sessionId);
-    if (pending.command === "fork") {
-      const result = await active.runtime.fork(value);
-      if (result.cancelled) return { type: "done", message: "Fork cancelled" };
-      return { type: "done", message: "Session forked", session: this.clientSessionFromRuntime(active.runtime) };
-    }
-    return { type: "unsupported", message: "Unsupported command response" };
+    return this.commandService.respond(sessionId, requestId, value);
   }
 
   async abort(sessionId: string): Promise<void> {
@@ -232,37 +152,6 @@ export class PiSessionService {
     this.active.set(session.sessionId, active);
   }
 
-  private isRuntimeCommand(session: AgentSession, name: string): boolean {
-    return session.extensionRunner.getRegisteredCommands().some((command) => command.invocationName === name)
-      || session.promptTemplates.some((template) => template.name === name)
-      || session.resourceLoader.getSkills().skills.some((skill) => `skill:${skill.name}` === name);
-  }
-
-  private clientSessionFromRuntime(runtime: AgentSessionRuntime): ClientSession {
-    const session = runtime.session;
-    return {
-      id: session.sessionId,
-      path: session.sessionFile ?? "",
-      cwd: runtime.cwd,
-      name: session.sessionName,
-      created: new Date().toISOString(),
-      modified: new Date().toISOString(),
-      messageCount: session.messages.length,
-      firstMessage: "",
-    };
-  }
-
-  private formatSessionStats(session: AgentSession): string {
-    const stats = session.getSessionStats();
-    return [
-      `Session: ${stats.sessionId}`,
-      `Messages: ${stats.totalMessages} (${stats.userMessages} user, ${stats.assistantMessages} assistant)`,
-      `Tool calls: ${stats.toolCalls}`,
-      `Tokens: ↑${stats.tokens.input} ↓${stats.tokens.output} total ${stats.tokens.total}`,
-      `Cost: $${stats.cost.toFixed(4)}`,
-    ].join("\n");
-  }
-
   private statusFromSession(session: AgentSession): ClientSessionStatus {
     const stats = session.getSessionStats();
     return {
@@ -286,11 +175,6 @@ export class PiSessionService {
       contextUsage: session.getContextUsage(),
     };
   }
-}
-
-function truncate(text: string, maxLength: number): string {
-  const singleLine = text.replace(/\s+/g, " ").trim();
-  return singleLine.length <= maxLength ? singleLine : `${singleLine.slice(0, maxLength - 1)}…`;
 }
 
 function toClientEvent(event: any): unknown {
