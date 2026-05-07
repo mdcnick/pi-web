@@ -94,7 +94,13 @@ journalctl --user -u pi-web-sessiond.service -f
 journalctl --user -u pi-web-ui-dev.service -f
 ```
 
-Because `sessiond` is intentionally not watched or restarted automatically, code changes that affect `src/server/sessiond.ts` or session runtime ownership require manually restarting `pi-web-sessiond.service`. Restarting only the UI dev service is enough for changes in the web/API/UI processes.
+Because `sessiond` is intentionally not watched or restarted automatically, code changes that affect `src/server/sessiond.ts` or session runtime ownership require manually restarting `pi-web-sessiond.service`:
+
+```bash
+systemctl --user restart pi-web-sessiond.service
+```
+
+Restarting only the UI dev service is enough for changes in the web/API/UI processes.
 
 For deployment:
 
