@@ -11,6 +11,7 @@ export class ChatView extends LitElement {
   @property() sessionId = "";
   @query(".chat") private chat?: HTMLDivElement;
   @state() private pinnedToBottom = true;
+  @state() private openGroupKeys = new Set<string>();
   private suppressScrollSave = false;
   private saveScrollTimer?: number;
 
@@ -19,7 +20,8 @@ export class ChatView extends LitElement {
     super.disconnectedCallback();
   }
 
-  protected willUpdate(): void {
+  protected willUpdate(changed: Map<string, unknown>): void {
+    if (changed.has("sessionId")) this.openGroupKeys = this.readOpenGroupKeys();
     this.pinnedToBottom = this.isNearBottom();
   }
 
@@ -48,8 +50,9 @@ export class ChatView extends LitElement {
   }
 
   private renderMessageGroup(messages: ChatLine[], startIndex: number) {
+    const key = this.groupKey(startIndex);
     return html`
-      <details class="msg event-group" data-index=${startIndex}>
+      <details class="msg event-group" data-index=${startIndex} ?open=${this.openGroupKeys.has(key)} @toggle=${(event: Event) => this.onGroupToggle(key, event)}>
         <summary>
           <b class="label">events</b>
           <span>${summarizeChatGroup(messages)}</span>
@@ -77,6 +80,15 @@ export class ChatView extends LitElement {
       </details>
     `;
     return null;
+  }
+
+  private onGroupToggle(key: string, event: Event) {
+    const details = event.currentTarget as HTMLDetailsElement;
+    const openGroupKeys = new Set(this.openGroupKeys);
+    if (details.open) openGroupKeys.add(key);
+    else openGroupKeys.delete(key);
+    this.openGroupKeys = openGroupKeys;
+    this.saveOpenGroupKeys();
   }
 
   private onScroll() {
@@ -198,6 +210,34 @@ export class ChatView extends LitElement {
 
   private storageKey(sessionId = this.sessionId): string {
     return `pi-web:chat-scroll:${sessionId}`;
+  }
+
+  private groupStorageKey(sessionId = this.sessionId): string {
+    return `pi-web:chat-groups:${sessionId}`;
+  }
+
+  private groupKey(startIndex: number): string {
+    return `${this.sessionId}:${startIndex}`;
+  }
+
+  private readOpenGroupKeys(): Set<string> {
+    if (!this.sessionId) return new Set();
+    try {
+      const raw = localStorage.getItem(this.groupStorageKey());
+      const value = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(value) ? value.filter((item) => typeof item === "string") : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  private saveOpenGroupKeys(): void {
+    if (!this.sessionId) return;
+    try {
+      localStorage.setItem(this.groupStorageKey(), JSON.stringify([...this.openGroupKeys]));
+    } catch {
+      // Ignore storage failures; group expansion should still work for this render.
+    }
   }
 
   static styles = chatStyles;
