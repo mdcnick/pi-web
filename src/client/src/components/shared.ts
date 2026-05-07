@@ -21,6 +21,7 @@ export interface CompletionItem {
   insertText: string;
   detail: string;
   description?: string;
+  cursorOffset?: number;
 }
 
 export const appStyles = css`

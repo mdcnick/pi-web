@@ -25,5 +25,9 @@ function isFileCompletionContext(draft: string): boolean {
   const token = currentToken(draft);
   if (token.startsWith("@")) return true;
   const tokenStart = draft.length - token.length;
-  return draft.slice(0, tokenStart).endsWith("@ ");
+  if (draft.slice(0, tokenStart).endsWith("@ ")) return true;
+  const quoteStart = draft.lastIndexOf("\"");
+  if (quoteStart === -1) return false;
+  const prefix = draft.slice(0, quoteStart);
+  return prefix.endsWith("@") || prefix.endsWith("@ ");
 }

@@ -107,13 +107,25 @@ export class PromptEditor extends LitElement {
       if (version !== this.requestVersion) return;
       this.completions = files
         .slice(0, 12)
-        .map((file) => ({ kind: "file", replaceFrom: trigger.from, replaceTo: trigger.to, insertText: `${trigger.fileMode === "path" ? "" : "@"}${file.path}`, detail: file.kind }));
+        .map((file) => {
+          const insertText = fileInsertText(file.path, trigger.fileMode === "path", trigger.quoted === true);
+          return {
+            kind: "file",
+            replaceFrom: trigger.from,
+            replaceTo: trigger.to,
+            insertText,
+            detail: file.kind,
+            ...(file.path.endsWith("/") && insertText.endsWith("\"") ? { cursorOffset: insertText.length - 1 } : {}),
+          };
+        });
     }
   }
 
-  private currentTrigger(): { kind: "command" | "file"; query: string; from: number; to: number; fileKind?: FileSuggestion["kind"]; fileMode?: "file" | "path" } | undefined {
+  private currentTrigger(): { kind: "command" | "file"; query: string; from: number; to: number; fileKind?: FileSuggestion["kind"]; fileMode?: "file" | "path"; quoted?: boolean } | undefined {
     const cursor = this.textarea?.selectionStart ?? this.draft.length;
     const beforeCursor = this.draft.slice(0, cursor);
+    const quotedTrigger = this.currentQuotedTrigger(beforeCursor, cursor);
+    if (quotedTrigger !== undefined) return quotedTrigger;
 
     const tokenStart = Math.max(beforeCursor.lastIndexOf(" "), beforeCursor.lastIndexOf("\n")) + 1;
     const token = beforeCursor.slice(tokenStart);
@@ -121,6 +133,15 @@ export class PromptEditor extends LitElement {
     if (beforeToken.endsWith("@ ")) return { kind: "file", query: token, from: tokenStart, to: cursor, fileMode: "path" };
     if (token.startsWith("/") && tokenStart === 0) return { kind: "command", query: token.slice(1), from: tokenStart, to: cursor };
     if (token.startsWith("@")) return { kind: "file", query: token.slice(1), from: tokenStart, to: cursor };
+    return undefined;
+  }
+
+  private currentQuotedTrigger(beforeCursor: string, cursor: number): { kind: "file"; query: string; from: number; to: number; fileMode?: "file" | "path"; quoted: true } | undefined {
+    const quoteStart = beforeCursor.lastIndexOf("\"");
+    if (quoteStart === -1) return undefined;
+    const prefix = beforeCursor.slice(0, quoteStart);
+    if (prefix.endsWith("@")) return { kind: "file", query: beforeCursor.slice(quoteStart + 1), from: prefix.length - 1, to: cursor, quoted: true };
+    if (prefix.endsWith("@ ")) return { kind: "file", query: beforeCursor.slice(quoteStart + 1), from: quoteStart, to: cursor, fileMode: "path", quoted: true };
     return undefined;
   }
 
@@ -148,6 +169,14 @@ export class PromptEditor extends LitElement {
         return;
       }
     }
+    if (event.key === "Tab") {
+      const trigger = this.currentTrigger();
+      if (trigger?.kind === "file") {
+        event.preventDefault();
+        void this.refreshCompletions();
+        return;
+      }
+    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       this.send(this.canSteer || this.isCompacting ? "followUp" : undefined);
@@ -155,10 +184,13 @@ export class PromptEditor extends LitElement {
   }
 
   private pick(item: CompletionItem) {
-    const suffix = item.kind === "file" && item.insertText.endsWith("/") ? "" : " ";
-    this.draft = `${this.draft.slice(0, item.replaceFrom)}${item.insertText}${suffix}${this.draft.slice(item.replaceTo)}`;
+    const suffix = item.kind === "file" && (item.insertText.endsWith("/") || item.cursorOffset !== undefined) ? "" : " ";
+    const cursor = item.replaceFrom + (item.cursorOffset ?? item.insertText.length) + suffix.length;
+    const after = item.insertText.endsWith("\"") && this.draft.slice(item.replaceTo).startsWith("\"") ? this.draft.slice(item.replaceTo + 1) : this.draft.slice(item.replaceTo);
+    this.draft = `${this.draft.slice(0, item.replaceFrom)}${item.insertText}${suffix}${after}`;
     if (this.sessionId !== undefined && this.sessionId !== "") saveDraft(this.sessionId, this.draft);
     this.completions = [];
+    void this.updateComplete.then(() => this.textarea?.setSelectionRange(cursor, cursor));
   }
 
   private send(streamingBehavior?: "steer" | "followUp") {
@@ -171,6 +203,12 @@ export class PromptEditor extends LitElement {
   }
 
   static override styles = promptEditorStyles;
+}
+
+function fileInsertText(path: string, pathMode: boolean, quoted: boolean): string {
+  const prefix = pathMode ? "" : "@";
+  if (!quoted && !path.includes(" ")) return `${prefix}${path}`;
+  return `${prefix}\"${path}\"`;
 }
 
 function emptySlashCommands(): SlashCommand[] {
