@@ -40,6 +40,8 @@ export class ChatView extends LitElement {
   @state() private loadedScrollPercent = 100;
   private suppressScrollSave = false;
   private saveScrollTimer?: number;
+  private lastScrollTop = 0;
+  private touchStartY: number | undefined;
 
   override disconnectedCallback(): void {
     window.clearTimeout(this.saveScrollTimer);
@@ -48,7 +50,7 @@ export class ChatView extends LitElement {
 
   protected override willUpdate(changed: Map<string, unknown>): void {
     if (changed.has("sessionId")) this.openGroupKeys = this.readOpenGroupKeys();
-    this.pinnedToBottom = this.isNearBottom();
+    if (changed.has("messages")) this.pinnedToBottom = this.pinnedToBottom && this.isNearBottom();
   }
 
   protected override updated(changed: Map<string, unknown>): void {
@@ -61,7 +63,7 @@ export class ChatView extends LitElement {
     return html`
       <div class="chat-wrap">
         ${this.renderHistoryIndicator()}
-        <div class="chat" @scroll=${() => { this.onScroll(); }}>
+        <div class="chat" @scroll=${() => { this.onScroll(); }} @wheel=${(event: WheelEvent) => { this.onWheel(event); }} @touchstart=${(event: TouchEvent) => { this.onTouchStart(event); }} @touchmove=${(event: TouchEvent) => { this.onTouchMove(event); }}>
           ${this.renderHistoryBoundary()}
           ${groupChatMessages(this.messages, this.messageStart).map((group) => group.kind === "message"
             ? this.renderMessage(group.message, group.index)
@@ -213,8 +215,31 @@ export class ChatView extends LitElement {
   private onScroll() {
     this.updateLoadedScrollPercent();
     if (this.chat && this.chat.scrollTop < 64 && this.hasMore && !this.loadingMore) this.onLoadMore?.();
-    this.pinnedToBottom = this.isNearBottom();
+    this.updatePinnedToBottomFromScroll();
     if (!this.suppressScrollSave) this.scheduleScrollPositionSave();
+  }
+
+  private onWheel(event: WheelEvent) {
+    if (event.deltaY < 0 && this.canScrollUp()) this.pinnedToBottom = false;
+  }
+
+  private onTouchStart(event: TouchEvent) {
+    this.touchStartY = event.touches[0]?.clientY;
+  }
+
+  private onTouchMove(event: TouchEvent) {
+    const y = event.touches[0]?.clientY;
+    if (this.touchStartY !== undefined && y !== undefined && y > this.touchStartY && this.canScrollUp()) this.pinnedToBottom = false;
+  }
+
+  private updatePinnedToBottomFromScroll() {
+    const chat = this.chat;
+    if (!chat) return;
+    const scrollingUp = chat.scrollTop < this.lastScrollTop;
+    if (this.isAtBottom()) this.pinnedToBottom = true;
+    else if (scrollingUp) this.pinnedToBottom = false;
+    else this.pinnedToBottom = this.isNearBottom();
+    this.lastScrollTop = chat.scrollTop;
   }
 
   private updateLoadedScrollPercent(): void {
@@ -228,7 +253,22 @@ export class ChatView extends LitElement {
   private isNearBottom(): boolean {
     const chat = this.chat;
     if (!chat) return true;
-    return chat.scrollHeight - chat.scrollTop - chat.clientHeight < 48;
+    return this.distanceFromBottom(chat) < 48;
+  }
+
+  private isAtBottom(): boolean {
+    const chat = this.chat;
+    if (!chat) return true;
+    return this.distanceFromBottom(chat) < 2;
+  }
+
+  private canScrollUp(): boolean {
+    const chat = this.chat;
+    return chat !== undefined && chat.scrollTop > 0;
+  }
+
+  private distanceFromBottom(chat: HTMLDivElement): number {
+    return chat.scrollHeight - chat.scrollTop - chat.clientHeight;
   }
 
   private scrollToBottom() {
@@ -237,6 +277,7 @@ export class ChatView extends LitElement {
       if (!chat) return;
       this.withSuppressedScrollSave(() => {
         chat.scrollTop = chat.scrollHeight;
+        this.lastScrollTop = chat.scrollTop;
       });
     });
   }
@@ -247,7 +288,10 @@ export class ChatView extends LitElement {
       const stored = this.readStoredScrollPosition();
       if (!chat || !stored) {
         this.withSuppressedScrollSave(() => {
-          if (chat) chat.scrollTop = chat.scrollHeight;
+          if (chat) {
+            chat.scrollTop = chat.scrollHeight;
+            this.lastScrollTop = chat.scrollTop;
+          }
         });
         return;
       }
@@ -256,6 +300,7 @@ export class ChatView extends LitElement {
       if (!article) {
         this.withSuppressedScrollSave(() => {
           chat.scrollTop = chat.scrollHeight;
+          this.lastScrollTop = chat.scrollTop;
         });
         return;
       }
@@ -263,6 +308,7 @@ export class ChatView extends LitElement {
         const chatTop = chat.getBoundingClientRect().top;
         const currentOffset = article.getBoundingClientRect().top - chatTop;
         chat.scrollTop += currentOffset - stored.offset;
+        this.lastScrollTop = chat.scrollTop;
       });
     });
   }
@@ -278,6 +324,7 @@ export class ChatView extends LitElement {
     if (!chat || !anchor) return;
     this.withSuppressedScrollSave(() => {
       chat.scrollTop = anchor.scrollTop + (chat.scrollHeight - anchor.scrollHeight);
+      this.lastScrollTop = chat.scrollTop;
     });
     this.updateLoadedScrollPercent();
   }
