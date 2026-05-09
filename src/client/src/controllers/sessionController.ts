@@ -304,6 +304,6 @@ export class SessionController {
 }
 
 function isTranscriptEvent(event: SessionUiEvent): boolean {
-  return ["message.append", "assistant.delta", "tool.start", "tool.end", "shell.start", "shell.chunk", "shell.end", "command.output", "session.error"].includes(event.type);
+  return ["message.append", "assistant.delta", "assistant.thinking.delta", "tool.start", "tool.end", "shell.start", "shell.chunk", "shell.end", "command.output", "session.error"].includes(event.type);
 }
 

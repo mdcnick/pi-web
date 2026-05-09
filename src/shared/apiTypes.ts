@@ -143,6 +143,7 @@ export type CommandResult =
 export type SessionUiEvent =
   | { type: "message.append"; message: unknown }
   | { type: "assistant.delta"; text: string }
+  | { type: "assistant.thinking.delta"; text: string }
   | { type: "tool.start"; toolName: string; toolCallId: string; summary: string; args?: unknown }
   | { type: "tool.end"; toolName: string; toolCallId: string; text: string; isError: boolean; content?: unknown }
   | { type: "shell.start"; command: string; excludeFromContext?: boolean }

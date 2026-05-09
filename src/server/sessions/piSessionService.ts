@@ -440,6 +440,9 @@ function toClientEvent(event: unknown): SessionUiEvent {
   if (eventType === "message_update" && getString(assistantMessageEvent, "type") === "text_delta") {
     return { type: "assistant.delta", text: getString(assistantMessageEvent, "delta") ?? "" };
   }
+  if (eventType === "message_update" && getString(assistantMessageEvent, "type") === "thinking_delta") {
+    return { type: "assistant.thinking.delta", text: getString(assistantMessageEvent, "delta") ?? "" };
+  }
   if (eventType === "tool_execution_start") {
     const args = getProperty(event, "args");
     return { type: "tool.start", toolName: getString(event, "toolName") ?? "", toolCallId: getString(event, "toolCallId") ?? "", summary: summarizeToolArgs(args), args };

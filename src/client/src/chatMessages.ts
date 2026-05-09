@@ -14,6 +14,7 @@ export function withMessageMeta(line: ChatLine, rawMessage: unknown): ChatLine {
 }
 
 export function appendText(messages: ChatLine[], role: ChatLine["role"], text: string): ChatLine[] {
+  if (text === "") return messages;
   const last = messages.at(-1);
   const lastPart = last?.parts.at(-1);
   if (last?.role === role && lastPart?.type === "text") {
@@ -22,7 +23,22 @@ export function appendText(messages: ChatLine[], role: ChatLine["role"], text: s
       { ...last, parts: [...last.parts.slice(0, -1), { ...lastPart, text: lastPart.text + text }] },
     ];
   }
+  if (last?.role === role) return [...messages.slice(0, -1), { ...last, parts: [...last.parts, { type: "text", text }] }];
   return [...messages, textMessage(role, text)];
+}
+
+export function appendThinking(messages: ChatLine[], text: string): ChatLine[] {
+  if (text === "") return messages;
+  const last = messages.at(-1);
+  const lastPart = last?.parts.at(-1);
+  if (last?.role === "assistant" && lastPart?.type === "thinking") {
+    return [
+      ...messages.slice(0, -1),
+      { ...last, parts: [...last.parts.slice(0, -1), { ...lastPart, text: lastPart.text + text }] },
+    ];
+  }
+  if (last?.role === "assistant") return [...messages.slice(0, -1), { ...last, parts: [...last.parts, { type: "thinking", text }] }];
+  return [...messages, { role: "assistant", parts: [{ type: "thinking", text }] }];
 }
 
 export function normalizeMessage(message: unknown): ChatLine[] {

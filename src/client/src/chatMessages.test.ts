@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendText, normalizeMessage, normalizeMessages, textMessage } from "./chatMessages";
+import { appendText, appendThinking, normalizeMessage, normalizeMessages, textMessage } from "./chatMessages";
 
 describe("chat message normalization", () => {
   it("normalizes simple text messages and drops empty content", () => {
@@ -51,10 +51,30 @@ describe("appendText", () => {
     ]);
   });
 
-  it("starts a new message when role or last part does not match", () => {
+  it("starts a new message when role does not match", () => {
     expect(appendText([textMessage("user", "hello")], "assistant", "hi")).toEqual([
       textMessage("user", "hello"),
       textMessage("assistant", "hi"),
+    ]);
+  });
+
+  it("adds a text part to the previous same-role non-text message", () => {
+    expect(appendText([{ role: "assistant", parts: [{ type: "thinking", text: "plan" }] }], "assistant", "answer")).toEqual([
+      { role: "assistant", parts: [{ type: "thinking", text: "plan" }, { type: "text", text: "answer" }] },
+    ]);
+  });
+});
+
+describe("appendThinking", () => {
+  it("appends thinking deltas to the previous assistant thinking part", () => {
+    expect(appendThinking([{ role: "assistant", parts: [{ type: "thinking", text: "pla" }] }], "n")).toEqual([
+      { role: "assistant", parts: [{ type: "thinking", text: "plan" }] },
+    ]);
+  });
+
+  it("adds a thinking part to the previous assistant message", () => {
+    expect(appendThinking([textMessage("assistant", "answer")], "plan")).toEqual([
+      { role: "assistant", parts: [{ type: "text", text: "answer" }, { type: "thinking", text: "plan" }] },
     ]);
   });
 });
