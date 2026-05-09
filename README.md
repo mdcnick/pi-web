@@ -92,8 +92,14 @@ Recommended install uses npm plus systemd user services:
 
 ```bash
 npm install -g @jmfederico/pi-web
+
+# Recommended on servers: keep user services running after logout/reboot.
+sudo loginctl enable-linger "$USER"
+
 pi-web install
 ```
+
+`loginctl enable-linger` is optional for local desktop use, but recommended on servers. It lets the user systemd manager start at boot and continue running after you log out, so Pi Web remains available without an active SSH/login session.
 
 This writes and starts:
 
@@ -101,6 +107,12 @@ This writes and starts:
 - `~/.config/systemd/user/pi-web.service`
 
 The generated services run through `bash -lc` so they see a shell environment similar to running `pi` from your terminal.
+
+To check whether lingering is enabled:
+
+```bash
+loginctl show-user "$USER" -p Linger
+```
 
 Open <http://127.0.0.1:8504>.
 
@@ -234,6 +246,13 @@ Restart=no
 
 [Install]
 WantedBy=default.target
+```
+
+On servers, enable persistent user services so the user systemd manager starts at boot and remains running after logout:
+
+```bash
+sudo loginctl enable-linger "$USER"
+loginctl show-user "$USER" -p Linger
 ```
 
 After creating or changing units:

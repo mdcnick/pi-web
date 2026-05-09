@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { defaultPiWebConfigPath, examplePiWebConfig } from "./config.js";
@@ -30,6 +30,16 @@ function capture(command: string, args: string[]): { status: number; stdout: str
 
 function hasCommand(command: string): boolean {
   return capture("/usr/bin/env", ["bash", "-lc", `command -v ${command}`]).status === 0;
+}
+
+function isLingerEnabled(): boolean | undefined {
+  if (!hasCommand("loginctl")) return undefined;
+  const result = capture("loginctl", ["show-user", userInfo().username, "-p", "Linger"]);
+  if (result.status !== 0) return undefined;
+  const value = result.stdout.trim();
+  if (value === "Linger=yes") return true;
+  if (value === "Linger=no") return false;
+  return undefined;
 }
 
 function parseInstallOptions(args: string[]): InstallOptions {
@@ -136,6 +146,16 @@ async function install(args: string[]): Promise<void> {
   console.log(`\nPi Web is installed and starting.`);
   console.log(`Config: ${configPath}`);
   console.log(`Open: http://${options.host === "0.0.0.0" ? "127.0.0.1" : options.host}:${options.port}`);
+
+  const linger = isLingerEnabled();
+  if (linger === false) {
+    console.log("\nRecommended for server use: keep user services running after logout/reboot:");
+    console.log(`  sudo loginctl enable-linger ${userInfo().username}`);
+  } else if (linger === undefined) {
+    console.log("\nRecommended for server use: enable systemd user lingering so services survive logout/reboot:");
+    console.log(`  sudo loginctl enable-linger ${userInfo().username}`);
+  }
+
   console.log("\nUseful commands:");
   console.log("  pi-web status");
   console.log("  pi-web logs");
@@ -179,6 +199,17 @@ function doctor(): void {
     console.log(`${ok ? "✓" : "✗"} ${label}`);
     const output = (result.stdout || result.stderr).trim();
     if (output !== "") console.log(`  ${output.split("\n")[0] ?? ""}`);
+  }
+
+  const linger = isLingerEnabled();
+  if (linger === true) {
+    console.log("✓ systemd user lingering enabled");
+  } else if (linger === false) {
+    console.log("✗ systemd user lingering disabled");
+    console.log(`  Recommended on servers: sudo loginctl enable-linger ${userInfo().username}`);
+  } else {
+    console.log("? systemd user lingering unknown");
+    console.log(`  Recommended on servers: sudo loginctl enable-linger ${userInfo().username}`);
   }
 
   if (failed) {
