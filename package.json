@@ -1,7 +1,9 @@
 {
   "name": "@jmfederico/pi-web",
   "version": "1.202605.1",
+  "description": "Browser control plane for persistent Pi Coding Agent sessions.",
   "license": "MIT",
+  "author": "Federico Jaramillo Martinez",
   "type": "module",
   "bin": {
     "pi-web": "./dist/cli.js",
@@ -89,7 +91,12 @@
     "@earendil-works/pi-ai": ">=0.74.0 <1"
   },
   "keywords": [
-    "pi-package"
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "coding-agent",
+    "agent",
+    "web"
   ],
   "pi": {
     "extensions": [
