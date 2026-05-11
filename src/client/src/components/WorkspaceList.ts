@@ -2,6 +2,7 @@ import { LitElement, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { Workspace } from "../api";
 import type { WorkspaceLabelItem } from "../plugins/types";
+import { activateSelectableRow, activateSelectableRowFromKeyboard } from "./selectableRow";
 import { listStyles } from "./shared";
 import { renderWorkspaceLabelItems } from "./workspaceLabel";
 
@@ -19,10 +20,16 @@ export class WorkspaceList extends LitElement {
         ${this.workspaces.map((workspace) => {
           const label = `${workspace.label}${workspace.isMain ? " · main" : ""}`;
           return html`
-            <div class=${this.selected?.id === workspace.id ? "workspace-row selected" : "workspace-row"}>
-              <div class="workspace-main">
+            <div
+              class=${`action-row workspace-row ${this.selected?.id === workspace.id ? "selected" : ""}`}
+              tabindex="0"
+              title=${workspace.path}
+              @click=${(event: MouseEvent) => { activateSelectableRow(event, () => this.onSelect?.(workspace)); }}
+              @keydown=${(event: KeyboardEvent) => { activateSelectableRowFromKeyboard(event, () => this.onSelect?.(workspace)); }}
+            >
+              <div class="action-main">
                 <span class="workspace-label">
-                  <button class="workspace-select" title=${workspace.path} @click=${() => this.onSelect?.(workspace)}>${label}</button>
+                  <span class="workspace-label-base">${label}</span>
                   ${renderWorkspaceLabelItems(this.workspaceLabelItems(workspace))}
                 </span>
                 <small>${workspace.path}</small>

@@ -1,6 +1,7 @@
 import { LitElement, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { SessionActivity, SessionInfo, SessionStatus } from "../api";
+import { activateSelectableRow, activateSelectableRowFromKeyboard } from "./selectableRow";
 import { listStyles } from "./shared";
 
 function sessionLabel(session: SessionInfo): string {
@@ -69,10 +70,17 @@ export class SessionList extends LitElement {
     const { session } = row;
     const cappedDepth = Math.min(row.depth, 2);
     return html`
-      <div class="action-row ${this.selected?.id === session.id ? "selected" : ""} ${session.archived === true ? "archived" : ""}" style=${`--depth:${String(cappedDepth)}`}>
-        <button class="action-main" @click=${() => this.onSelect?.(session)}>
+      <div
+        class="action-row ${this.selected?.id === session.id ? "selected" : ""} ${session.archived === true ? "archived" : ""}"
+        style=${`--depth:${String(cappedDepth)}`}
+        tabindex="0"
+        title=${session.path}
+        @click=${(event: MouseEvent) => { activateSelectableRow(event, () => this.onSelect?.(session)); }}
+        @keydown=${(event: KeyboardEvent) => { activateSelectableRowFromKeyboard(event, () => this.onSelect?.(session)); }}
+      >
+        <div class="action-main">
           <span>${row.depth > 0 ? html`<span class="tree-marker">↳</span>` : null}${sessionLabel(session)}${row.depth > 2 ? html` <span class="badge">depth ${row.depth}</span>` : null}${row.hasMissingParent ? html` <span class="badge">parent unavailable</span>` : null}</span><small>${this.renderStatus(session)}${String(session.messageCount)} messages</small>
-        </button>
+        </div>
         <div class="action-menu">
           <button class="action-menu-toggle" title="Session actions" @click=${(event: MouseEvent) => { event.stopPropagation(); this.toggleMenu(session.id, event.currentTarget); }}>⋯</button>
           ${this.openMenuSessionId === session.id ? html`

@@ -1,6 +1,7 @@
 import { LitElement, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { Project } from "../api";
+import { activateSelectableRow, activateSelectableRowFromKeyboard } from "./selectableRow";
 import { listStyles } from "./shared";
 
 @customElement("project-list")
@@ -35,10 +36,16 @@ export class ProjectList extends LitElement {
       <section>
         <h2>Projects</h2>
         ${this.projects.map((project) => html`
-          <div class=${`action-row ${this.selected?.id === project.id ? "selected" : ""}`}>
-            <button class="action-main" @click=${() => this.onSelect?.(project)}>
+          <div
+            class=${`action-row ${this.selected?.id === project.id ? "selected" : ""}`}
+            tabindex="0"
+            title=${project.path}
+            @click=${(event: MouseEvent) => { activateSelectableRow(event, () => this.onSelect?.(project)); }}
+            @keydown=${(event: KeyboardEvent) => { activateSelectableRowFromKeyboard(event, () => this.onSelect?.(project)); }}
+          >
+            <div class="action-main">
               <span>${project.name}</span><small>${project.path}</small>
-            </button>
+            </div>
             <div class="action-menu">
               <button class="action-menu-toggle" title="Project actions" aria-label=${`Actions for ${project.name}`} @click=${(event: MouseEvent) => { event.stopPropagation(); this.toggleMenu(project.id, event.currentTarget); }}>⋯</button>
               ${this.openMenuProjectId === project.id ? html`

@@ -109,17 +109,16 @@ export const listStyles = css`
   h2 { display: flex; justify-content: space-between; align-items: center; margin: 0 0 8px; color: #8b949e; font-size: 12px; text-transform: uppercase; }
   button { border: 1px solid #30363d; border-radius: 8px; background: #161b22; color: #e6edf3; padding: 7px 9px; cursor: pointer; }
   section > button { display: block; width: 100%; text-align: left; margin: 6px 0; }
-  .workspace-row { margin: 6px 0; }
-  .workspace-row.selected .workspace-main { border-color: #58a6ff; background: #0d2847; }
-  .workspace-main { box-sizing: border-box; display: block; width: 100%; border: 1px solid #30363d; border-radius: 8px; background: #161b22; padding: 7px 9px; text-align: left; }
-  .workspace-select { min-width: 0; border: 0; background: transparent; color: #e6edf3; padding: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; }
   .subheading { margin-top: 14px; }
   .section-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; border: 0; background: transparent; color: inherit; padding: 0; font: inherit; text-transform: inherit; }
   .section-toggle small { display: inline; color: inherit; font-size: inherit; }
-  .action-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; margin: 6px 0; }
+  .action-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; margin: 6px 0; cursor: pointer; }
+  .action-row:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; border-radius: 8px; }
   .action-row.selected .action-main, .action-row.selected .action-menu-toggle { border-color: #58a6ff; background: #0d2847; }
   .action-row.archived .action-main { color: #8b949e; }
-  .action-main { min-width: 0; text-align: left; border-top-right-radius: 0; border-bottom-right-radius: 0; padding-left: calc(9px + var(--depth, 0) * 16px); }
+  .action-main { box-sizing: border-box; min-width: 0; width: 100%; border: 1px solid #30363d; border-top-right-radius: 0; border-bottom-right-radius: 0; border-top-left-radius: 8px; border-bottom-left-radius: 8px; background: #161b22; color: #e6edf3; padding: 7px 9px 7px calc(9px + var(--depth, 0) * 16px); text-align: left; }
+  .action-row:not(.selected):hover .action-main { background: #21262d; }
+  .workspace-row .action-main { border-radius: 8px; }
   .tree-marker { color: #6e7681; margin-right: 5px; }
   .badge { display: inline-block; margin-left: 5px; border: 1px solid #30363d; border-radius: 999px; color: #8b949e; padding: 0 5px; font-size: 11px; font-weight: 400; }
   .action-menu { position: relative; align-self: stretch; }
