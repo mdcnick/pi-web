@@ -1,8 +1,18 @@
 import type { FastifyInstance } from "fastify";
 import type { RawData } from "ws";
-import type { TerminalService } from "./terminalService.js";
+import type { TerminalInfo } from "./terminalService.js";
+import { parseTerminalSize } from "./terminalSize.js";
 
-export function registerTerminalRoutes(app: FastifyInstance, terminals: TerminalService, prefix = ""): void {
+export interface TerminalRouteService {
+  list(cwd: string): TerminalInfo[];
+  create(options: { cwd: string; name?: string; cols?: number; rows?: number }): TerminalInfo;
+  close(id: string): void;
+  attach(id: string, handlers: { output: (data: string, replay: boolean) => void; exit: (exitCode: number | undefined) => void }): () => void;
+  write(id: string, data: string): void;
+  resize(id: string, cols: number, rows: number): void;
+}
+
+export function registerTerminalRoutes(app: FastifyInstance, terminals: TerminalRouteService, prefix = ""): void {
   app.get<{ Querystring: { cwd?: string } }>(`${prefix}/terminals`, (request, reply) => {
     if (request.query.cwd === undefined || request.query.cwd === "") return reply.code(400).send({ error: "cwd query parameter is required" });
     return terminals.list(request.query.cwd);
@@ -21,9 +31,11 @@ export function registerTerminalRoutes(app: FastifyInstance, terminals: Terminal
     return { closed: true };
   });
 
-  app.get<{ Params: { terminalId: string } }>(`${prefix}/terminals/:terminalId/socket`, { websocket: true }, (socket, request) => {
+  app.get<{ Params: { terminalId: string }; Querystring: { cols?: string; rows?: string } }>(`${prefix}/terminals/:terminalId/socket`, { websocket: true }, (socket, request) => {
     let detach: (() => void) | undefined;
     try {
+      const initialSize = parseTerminalSize(request.query.cols, request.query.rows);
+      if (initialSize !== undefined) terminals.resize(request.params.terminalId, initialSize.cols, initialSize.rows);
       detach = terminals.attach(request.params.terminalId, {
         output: (data, replay) => { socket.send(JSON.stringify({ type: "output", data, replay })); },
         exit: (exitCode) => { socket.send(JSON.stringify({ type: "exit", exitCode })); },

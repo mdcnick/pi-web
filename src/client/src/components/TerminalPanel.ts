@@ -1,9 +1,19 @@
 import { css, html, LitElement } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
-import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
+import { Terminal, type ITerminalOptions } from "@xterm/xterm";
+import { FitAddon, type ITerminalDimensions } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { terminalSocket, terminalsApi, type TerminalInfo, type Workspace } from "../api";
+
+const TERMINAL_OPTIONS: ITerminalOptions = {
+  cursorBlink: true,
+  convertEol: true,
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  fontSize: 13,
+  theme: { background: "#05070a", foreground: "#e6edf3", cursor: "#58a6ff", selectionBackground: "#264f78" },
+};
+
+const DEFAULT_TERMINAL_SIZE: TerminalSize = { cols: 100, rows: 30 };
 
 @customElement("terminal-panel")
 export class TerminalPanel extends LitElement {
@@ -82,7 +92,8 @@ export class TerminalPanel extends LitElement {
     if (this.workspace === undefined) return;
     this.error = undefined;
     try {
-      const terminal = await terminalsApi.startTerminal(this.workspace.projectId, this.workspace.id, { cols: 100, rows: 30 });
+      const size = this.measureTerminalSize() ?? DEFAULT_TERMINAL_SIZE;
+      const terminal = await terminalsApi.startTerminal(this.workspace.projectId, this.workspace.id, size);
       this.terminals = [...this.terminals, terminal];
       this.selectTerminal(terminal.id);
     } catch (error) {
@@ -115,13 +126,7 @@ export class TerminalPanel extends LitElement {
   private ensureTerminalView(): void {
     const workspace = this.workspace;
     if (!this.visible || this.terminal !== undefined || this.selectedId === undefined || this.terminalHost === undefined || workspace === undefined) return;
-    const terminal = new Terminal({
-      cursorBlink: true,
-      convertEol: true,
-      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-      fontSize: 13,
-      theme: { background: "#05070a", foreground: "#e6edf3", cursor: "#58a6ff", selectionBackground: "#264f78" },
-    });
+    const terminal = new Terminal(TERMINAL_OPTIONS);
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(this.terminalHost);
@@ -134,13 +139,14 @@ export class TerminalPanel extends LitElement {
       const filtered = filterTerminalInput(data);
       if (filtered !== "") this.send({ type: "input", data: filtered });
     });
-    this.connectSocket(workspace.projectId, workspace.id, this.selectedId, terminal);
+    const initialSize = this.fitTerminal();
+    this.connectSocket(workspace.projectId, workspace.id, this.selectedId, terminal, initialSize);
     requestAnimationFrame(() => { this.fitAndNotify(); });
     terminal.focus();
   }
 
-  private connectSocket(projectId: string, workspaceId: string, terminalId: string, terminal: Terminal): void {
-    const socket = terminalSocket(projectId, workspaceId, terminalId);
+  private connectSocket(projectId: string, workspaceId: string, terminalId: string, terminal: Terminal, initialSize: TerminalSize | undefined): void {
+    const socket = terminalSocket(projectId, workspaceId, terminalId, initialSize);
     socket.binaryType = "arraybuffer";
     this.socket = socket;
     socket.addEventListener("open", () => { this.fitAndNotify(); });
@@ -180,9 +186,32 @@ export class TerminalPanel extends LitElement {
   }
 
   private fitAndNotify(): void {
-    if (this.fitAddon === undefined || this.terminal === undefined) return;
+    const size = this.fitTerminal();
+    if (size === undefined) return;
+    this.send({ type: "resize", ...size });
+  }
+
+  private fitTerminal(): TerminalSize | undefined {
+    if (this.fitAddon === undefined || this.terminal === undefined) return undefined;
+    const dimensions = this.fitAddon.proposeDimensions();
+    const size = terminalSizeFromDimensions(dimensions);
+    if (size === undefined) return undefined;
     this.fitAddon.fit();
-    this.send({ type: "resize", cols: this.terminal.cols, rows: this.terminal.rows });
+    return size;
+  }
+
+  private measureTerminalSize(): TerminalSize | undefined {
+    const currentSize = this.fitTerminal();
+    if (currentSize !== undefined) return currentSize;
+    if (this.terminal !== undefined || this.terminalHost === undefined) return undefined;
+
+    const measuringTerminal = new Terminal(TERMINAL_OPTIONS);
+    const measuringFitAddon = new FitAddon();
+    measuringTerminal.loadAddon(measuringFitAddon);
+    measuringTerminal.open(this.terminalHost);
+    const size = terminalSizeFromDimensions(measuringFitAddon.proposeDimensions());
+    measuringTerminal.dispose();
+    return size;
   }
 
   private send(message: { type: "input"; data: string } | { type: "resize"; cols: number; rows: number }): void {
@@ -249,6 +278,11 @@ export class TerminalPanel extends LitElement {
   `;
 }
 
+interface TerminalSize {
+  cols: number;
+  rows: number;
+}
+
 type ServerTerminalMessage =
   | { type: "output"; data: string; replay?: boolean }
   | { type: "exit"; exitCode?: number }
@@ -276,6 +310,15 @@ async function socketDataToString(data: unknown): Promise<string> {
   if (data instanceof ArrayBuffer) return new TextDecoder().decode(data);
   if (data instanceof Blob) return await data.text();
   return String(data);
+}
+
+function terminalSizeFromDimensions(dimensions: ITerminalDimensions | undefined): TerminalSize | undefined {
+  if (dimensions === undefined || !isValidTerminalSize(dimensions.cols, dimensions.rows)) return undefined;
+  return { cols: Math.floor(dimensions.cols), rows: Math.floor(dimensions.rows) };
+}
+
+function isValidTerminalSize(cols: number, rows: number): boolean {
+  return Number.isFinite(cols) && Number.isFinite(rows) && cols > 0 && rows > 0;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
