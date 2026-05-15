@@ -194,16 +194,42 @@ video {
   font-size: 0.95rem;
 }
 
-.nav-links a {
+.nav-links a,
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 10px 12px;
   border: 1px solid transparent;
 }
 
 .nav-links a[aria-current="page"],
-.nav-links a:hover {
+.nav-links a:hover,
+.theme-toggle:hover {
   border-color: var(--line-bright);
   background: var(--panel);
   color: var(--text);
+}
+
+.github-icon {
+  width: 1em;
+  height: 1em;
+  flex: 0 0 auto;
+}
+
+.theme-toggle {
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.theme-toggle[data-theme="dark"] [data-theme-icon] {
+  color: var(--brand-2);
+}
+
+.theme-toggle[data-theme="light"] [data-theme-icon] {
+  color: var(--brand-3);
 }
 
 .button,
@@ -682,6 +708,186 @@ code .comment,
 .footer-links {
   display: flex;
   gap: 14px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #f7f1e6;
+    --bg-soft: #eee5d5;
+    --panel: #fff9ee;
+    --panel-strong: #f0e6d6;
+    --line: #c9bca8;
+    --line-bright: #8d7b64;
+    --text: #15131b;
+    --muted: #5f586a;
+    --muted-2: #766f7e;
+    --brand: #6430d8;
+    --brand-2: #008c82;
+    --brand-3: #b05f00;
+    --danger: #b51d49;
+  }
+
+  body {
+    background: linear-gradient(180deg, #f7f1e6 0%, #f4eadb 48%, #eee4d4 100%);
+  }
+
+  .site-header {
+    background: rgba(247, 241, 230, 0.94);
+  }
+
+  .button.primary {
+    color: #fff9ee;
+    box-shadow: 7px 7px 0 #d8c7ee;
+  }
+
+  .button.primary:hover {
+    color: #15131b;
+  }
+
+  .terminal,
+  .code-card,
+  .kbd {
+    background: #15131b;
+  }
+
+  .terminal-top,
+  .demo-caption {
+    background: #201c2a;
+  }
+
+  .callout.warning {
+    background: #fff2d2;
+  }
+
+  .callout.danger {
+    background: #ffe1e9;
+  }
+
+  .intro-word:nth-child(1) {
+    --intro-color: var(--text);
+  }
+
+  code .comment,
+  .comment {
+    color: #aaa1bb;
+  }
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #070912;
+  --bg-soft: #0b0f1d;
+  --panel: #101527;
+  --panel-strong: #151b31;
+  --line: #26304f;
+  --line-bright: #3d4a78;
+  --text: #f7f4ff;
+  --muted: #aaa4bd;
+  --muted-2: #817a99;
+  --brand: #7c3cff;
+  --brand-2: #00f0d8;
+  --brand-3: #ffb000;
+  --danger: #ff4f7b;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f7f1e6;
+  --bg-soft: #eee5d5;
+  --panel: #fff9ee;
+  --panel-strong: #f0e6d6;
+  --line: #c9bca8;
+  --line-bright: #8d7b64;
+  --text: #15131b;
+  --muted: #5f586a;
+  --muted-2: #766f7e;
+  --brand: #6430d8;
+  --brand-2: #008c82;
+  --brand-3: #b05f00;
+  --danger: #b51d49;
+}
+
+html[data-theme="dark"] body {
+  background: linear-gradient(180deg, #070912 0%, #080b15 44%, #0a0d18 100%);
+}
+
+html[data-theme="light"] body {
+  background: linear-gradient(180deg, #f7f1e6 0%, #f4eadb 48%, #eee4d4 100%);
+}
+
+html[data-theme="dark"] .site-header {
+  background: rgba(7, 9, 18, 0.94);
+}
+
+html[data-theme="light"] .site-header {
+  background: rgba(247, 241, 230, 0.94);
+}
+
+html[data-theme="dark"] .button.primary {
+  color: #02050a;
+  box-shadow: 7px 7px 0 var(--brand);
+}
+
+html[data-theme="light"] .button.primary {
+  color: #fff9ee;
+  box-shadow: 7px 7px 0 #d8c7ee;
+}
+
+html[data-theme="dark"] .terminal,
+html[data-theme="dark"] .code-card,
+html[data-theme="dark"] .kbd {
+  background: #050710;
+}
+
+html[data-theme="light"] .terminal,
+html[data-theme="light"] .code-card,
+html[data-theme="light"] .kbd {
+  background: #15131b;
+}
+
+html[data-theme="dark"] .terminal-top,
+html[data-theme="dark"] .demo-caption {
+  background: #0c1020;
+}
+
+html[data-theme="light"] .terminal-top,
+html[data-theme="light"] .demo-caption {
+  background: #201c2a;
+}
+
+html[data-theme="dark"] .callout.warning {
+  background: #16140d;
+}
+
+html[data-theme="light"] .callout.warning {
+  background: #fff2d2;
+}
+
+html[data-theme="dark"] .callout.danger {
+  background: #170d15;
+}
+
+html[data-theme="light"] .callout.danger {
+  background: #ffe1e9;
+}
+
+html[data-theme="dark"] .intro-word:nth-child(1) {
+  --intro-color: #ffffff;
+}
+
+html[data-theme="light"] .intro-word:nth-child(1) {
+  --intro-color: var(--text);
+}
+
+html[data-theme="dark"] code .comment,
+html[data-theme="dark"] .comment {
+  color: #928cab;
+}
+
+html[data-theme="light"] code .comment,
+html[data-theme="light"] .comment {
+  color: #aaa1bb;
 }
 
 @media (max-width: 920px) {
