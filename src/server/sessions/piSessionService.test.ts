@@ -244,6 +244,69 @@ describe("PiSessionService", () => {
     await service.dispose();
   });
 
+  it("refreshes auth state and dedupes warnings when logout removes the current model's credentials", async () => {
+    const hub = new CapturingSessionEventHub();
+    const fake = fakeRuntime("auth-session");
+    (fake.runtime.session as unknown as { model: { provider: string; id: string } }).model = { provider: "anthropic", id: "claude-3-5-sonnet" };
+
+    const credentials = new Map<string, { type: "api_key" | "oauth"; key?: string }>([["anthropic", { type: "api_key", key: "sk-test" }]]);
+    const authStorage = {
+      get(provider: string) { return credentials.get(provider); },
+      list(): string[] { return Array.from(credentials.keys()); },
+      getOAuthProviders: () => [],
+      hasAuth(provider: string): boolean { return credentials.has(provider); },
+      getAuthStatus(provider: string) { return credentials.has(provider) ? { configured: true, source: "stored" as const } : { configured: false }; },
+    };
+    let refreshCalls = 0;
+    const knownModels = [{ provider: "anthropic", id: "claude-3-5-sonnet" }];
+    const modelRegistry = {
+      authStorage,
+      refresh(): void { refreshCalls += 1; },
+      getAll: () => knownModels,
+      getAvailable: () => credentials.has("anthropic") ? knownModels : [],
+      find: (provider: string, id: string) => knownModels.find((model) => model.provider === provider && model.id === id),
+      getProviderDisplayName: (provider: string) => provider,
+      getProviderAuthStatus: (provider: string) => authStorage.getAuthStatus(provider),
+      hasConfiguredAuth: (model: { provider: string }) => credentials.has(model.provider),
+    };
+    (fake.runtime.session as unknown as { modelRegistry: typeof modelRegistry }).modelRegistry = modelRegistry;
+
+    const service = new PiSessionService(hub, {
+      modelRegistry: modelRegistry as unknown as NonNullable<NonNullable<ConstructorParameters<typeof PiSessionService>[1]>["modelRegistry"]>,
+      createRuntime: () => Promise.resolve(asRuntimeFactoryResult(fake.runtime)),
+      createAgentRuntime: () => Promise.resolve(fake.runtime),
+      sessionManager: {
+        create: () => fakeSessionManager(),
+        list: () => Promise.resolve([]),
+        listAll: () => Promise.resolve([{ id: "auth-session", path: "/sessions/auth-session.jsonl", cwd: "/workspace", created: new Date("2026-01-01T00:00:00.000Z"), modified: new Date("2026-01-01T00:01:00.000Z"), messageCount: 0, firstMessage: "", allMessagesText: "" }]),
+        open: () => fakeSessionManager(),
+      },
+      heartbeatIntervalMs: 60_000,
+    });
+
+    await service.status("auth-session");
+    hub.sessionEvents.length = 0;
+    hub.globalEvents.length = 0;
+    const refreshBefore = refreshCalls;
+
+    credentials.delete("anthropic");
+    service.applyAuthChange({ removedProviderId: "anthropic" });
+    service.applyAuthChange({ removedProviderId: "anthropic" });
+
+    const warningCount = () => hub.sessionEvents.filter(({ event }) => event.type === "command.output" && event.level === "error" && event.message.includes("anthropic/claude-3-5-sonnet")).length;
+    expect(refreshCalls).toBeGreaterThan(refreshBefore);
+    expect(warningCount()).toBe(1);
+    expect(hub.globalEvents.some((event) => event.type === "status.update" && event.status.sessionId === "auth-session")).toBe(true);
+
+    credentials.set("anthropic", { type: "api_key", key: "sk-new" });
+    service.applyAuthChange();
+    credentials.delete("anthropic");
+    service.applyAuthChange({ removedProviderId: "anthropic" });
+    expect(warningCount()).toBe(2);
+
+    await service.dispose();
+  });
+
   it("clears queued messages when stopping a session runtime", async () => {
     const fake = fakeRuntime("stop-session");
     const service = new PiSessionService(new CapturingSessionEventHub(), {

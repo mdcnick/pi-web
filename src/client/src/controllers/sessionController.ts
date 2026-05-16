@@ -199,6 +199,10 @@ export class SessionController {
     this.setState({ commandDialog: undefined });
   }
 
+  applySessionStatus(status: SessionStatus): void {
+    this.applyStatus(status);
+  }
+
   async archiveSession(session = this.getState().selectedSession) {
     if (!session) return;
     if (isCachedNewSessionInfo(session)) {

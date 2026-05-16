@@ -4,6 +4,8 @@ import { dirname } from "node:path";
 import Fastify from "fastify";
 import fastifyWebsocket from "@fastify/websocket";
 import { SessionEventHub } from "./realtime/sessionEventHub.js";
+import { AuthService } from "./sessions/authService.js";
+import { registerAuthRoutes } from "./sessions/authRoutes.js";
 import { PiSessionService } from "./sessions/piSessionService.js";
 import { registerSessionRoutes } from "./sessions/sessionRoutes.js";
 import { sessiondSocketPath } from "./sessiond/config.js";
@@ -14,8 +16,11 @@ const app = Fastify({ logger: true });
 await app.register(fastifyWebsocket);
 
 const eventHub = new SessionEventHub();
-const sessions = new PiSessionService(eventHub);
+const auth = new AuthService();
+const sessions = new PiSessionService(eventHub, { modelRegistry: auth.modelRegistry });
+auth.subscribe((change) => { sessions.applyAuthChange(change); });
 const terminals = new TerminalService(eventHub);
+registerAuthRoutes(app, auth);
 registerSessionRoutes(app, sessions, eventHub);
 registerTerminalRoutes(app, terminals);
 
@@ -27,6 +32,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   shuttingDown = true;
   app.log.info({ signal }, "shutting down session daemon");
   terminals.dispose();
+  auth.dispose();
   await sessions.dispose();
   await app.close();
 }

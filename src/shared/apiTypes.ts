@@ -53,6 +53,38 @@ export interface SessionModel {
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
+export type AuthType = "oauth" | "api_key";
+export type AuthStatusSource = "stored" | "runtime" | "environment" | "fallback" | "models_json_key" | "models_json_command";
+
+export interface AuthProviderStatus {
+  configured: boolean;
+  source?: AuthStatusSource;
+  label?: string;
+}
+
+export interface AuthProviderOption {
+  id: string;
+  name: string;
+  authType: AuthType;
+  status: AuthProviderStatus;
+}
+
+export interface AuthProvidersResponse {
+  providers: AuthProviderOption[];
+}
+
+export interface OAuthFlowState {
+  flowId: string;
+  providerId: string;
+  providerName: string;
+  status: "running" | "complete" | "error" | "cancelled";
+  auth?: { url: string; instructions?: string };
+  prompt?: { requestId: string; message: string; placeholder?: string; allowEmpty?: boolean; kind: "prompt" | "manual" };
+  select?: { requestId: string; message: string; options: CommandOption[] };
+  progress: string[];
+  error?: string;
+}
+
 export interface ModelSelectionResponse {
   models: SessionModel[];
 }

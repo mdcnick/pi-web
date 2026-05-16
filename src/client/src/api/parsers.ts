@@ -1,4 +1,4 @@
-import type { CommandOption, CommandResult, FileContentResponse, FileSuggestion, FileTreeEntry, FileTreeResponse, GitDiffResponse, GitFileState, GitStatusFile, GitStatusResponse, MessagePage, ModelSelectionResponse, Project, QueuedSessionMessage, SessionInfo, SessionModel, SessionStatus, SlashCommand, TerminalInfo, ThinkingLevel, ThinkingLevelsResponse, Workspace } from "../../../shared/apiTypes";
+import type { AuthProviderOption, AuthProviderStatus, AuthProvidersResponse, AuthStatusSource, AuthType, CommandOption, CommandResult, FileContentResponse, FileSuggestion, FileTreeEntry, FileTreeResponse, GitDiffResponse, GitFileState, GitStatusFile, GitStatusResponse, MessagePage, ModelSelectionResponse, OAuthFlowState, Project, QueuedSessionMessage, SessionInfo, SessionModel, SessionStatus, SlashCommand, TerminalInfo, ThinkingLevel, ThinkingLevelsResponse, Workspace } from "../../../shared/apiTypes";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -150,6 +150,76 @@ function parseThinkingLevel(value: unknown): ThinkingLevel {
 export function parseThinkingLevelsResponse(value: unknown): ThinkingLevelsResponse {
   const record = requireRecord(value);
   return { levels: arrayOf(parseThinkingLevel)(record["levels"]) };
+}
+
+function parseAuthType(value: unknown): AuthType {
+  if (value !== "oauth" && value !== "api_key") throw new Error("Invalid auth type");
+  return value;
+}
+
+function parseAuthStatusSource(value: unknown): AuthStatusSource {
+  if (value !== "stored" && value !== "runtime" && value !== "environment" && value !== "fallback" && value !== "models_json_key" && value !== "models_json_command") throw new Error("Invalid auth status source");
+  return value;
+}
+
+function parseAuthProviderStatus(value: unknown): AuthProviderStatus {
+  const record = requireRecord(value);
+  const source = record["source"] === undefined ? undefined : parseAuthStatusSource(record["source"]);
+  return { configured: requireBoolean(record, "configured"), ...optionalField("source", source), ...optionalField("label", optionalString(record, "label")) };
+}
+
+function parseAuthProviderOption(value: unknown): AuthProviderOption {
+  const record = requireRecord(value);
+  return { id: requireString(record, "id"), name: requireString(record, "name"), authType: parseAuthType(record["authType"]), status: parseAuthProviderStatus(record["status"]) };
+}
+
+export function parseAuthProvidersResponse(value: unknown): AuthProvidersResponse {
+  const record = requireRecord(value);
+  return { providers: arrayOf(parseAuthProviderOption)(record["providers"]) };
+}
+
+export function parseOAuthFlowState(value: unknown): OAuthFlowState {
+  const record = requireRecord(value);
+  const flow = {
+    flowId: requireString(record, "flowId"),
+    providerId: requireString(record, "providerId"),
+    providerName: requireString(record, "providerName"),
+    status: parseOAuthFlowStatus(record["status"]),
+    progress: arrayOf((item) => {
+      if (typeof item !== "string") throw new Error("Expected progress item string");
+      return item;
+    })(record["progress"]),
+    ...optionalField("error", optionalString(record, "error")),
+    ...optionalField("auth", optionalOAuthAuth(record["auth"])),
+    ...optionalField("prompt", optionalOAuthPrompt(record["prompt"])),
+    ...optionalField("select", optionalOAuthSelect(record["select"])),
+  };
+  return flow;
+}
+
+function parseOAuthFlowStatus(value: unknown): OAuthFlowState["status"] {
+  if (value !== "running" && value !== "complete" && value !== "error" && value !== "cancelled") throw new Error("Invalid OAuth flow status");
+  return value;
+}
+
+function optionalOAuthAuth(value: unknown): OAuthFlowState["auth"] | undefined {
+  if (value === undefined) return undefined;
+  const record = requireRecord(value);
+  return { url: requireString(record, "url"), ...optionalField("instructions", optionalString(record, "instructions")) };
+}
+
+function optionalOAuthPrompt(value: unknown): OAuthFlowState["prompt"] | undefined {
+  if (value === undefined) return undefined;
+  const record = requireRecord(value);
+  const kind = requireString(record, "kind");
+  if (kind !== "prompt" && kind !== "manual") throw new Error("Invalid OAuth prompt kind");
+  return { requestId: requireString(record, "requestId"), message: requireString(record, "message"), kind, ...optionalField("placeholder", optionalString(record, "placeholder")), ...(record["allowEmpty"] === true ? { allowEmpty: true } : {}) };
+}
+
+function optionalOAuthSelect(value: unknown): OAuthFlowState["select"] | undefined {
+  if (value === undefined) return undefined;
+  const record = requireRecord(value);
+  return { requestId: requireString(record, "requestId"), message: requireString(record, "message"), options: arrayOf(parseCommandOption)(record["options"]) };
 }
 
 function optionalContextUsage(value: unknown): Pick<SessionStatus, "contextUsage"> | object {

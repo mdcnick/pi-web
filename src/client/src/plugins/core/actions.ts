@@ -26,6 +26,20 @@ export function createCoreActions(): PluginAction[] {
       run: (context) => context.addProject(),
     },
     {
+      id: "auth.login",
+      title: "Configure Provider Authentication",
+      description: "Run /login without tying authentication to a session",
+      group: "General",
+      run: (context) => context.configureAuth(),
+    },
+    {
+      id: "auth.logout",
+      title: "Remove Provider Authentication",
+      description: "Run /logout for stored pi credentials",
+      group: "General",
+      run: (context) => context.logoutAuth(),
+    },
+    {
       id: "view.chat",
       title: "Go to Chat",
       shortcut: "mod+1",

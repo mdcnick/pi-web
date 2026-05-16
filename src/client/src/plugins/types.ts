@@ -28,6 +28,8 @@ export interface PluginRuntimeContext {
   openActionPalette: () => void;
   focusPrompt: () => void;
   addProject: () => void | Promise<void>;
+  configureAuth: () => void | Promise<void>;
+  logoutAuth: () => void | Promise<void>;
   selectMainView: (view: AppState["mainView"]) => void;
   selectWorkspaceTool: (tool: QualifiedContributionId) => void;
   refreshFiles: () => void | Promise<void>;

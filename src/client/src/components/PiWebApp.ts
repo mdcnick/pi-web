@@ -3,6 +3,7 @@ import { customElement, query, state } from "lit/decorators.js";
 import { terminalsApi, type Project, type RealtimeEvent, type SessionInfo, type TerminalUiEvent, type ThinkingLevel, type Workspace } from "../api";
 import type { AppAction } from "../actions";
 import { initialAppState, type AppState } from "../appState";
+import { AuthController } from "../controllers/authController";
 import { FileExplorerController } from "../controllers/fileExplorerController";
 import { GitController } from "../controllers/gitController";
 import { ProjectController } from "../controllers/projectController";
@@ -26,6 +27,7 @@ import type { PromptEditor } from "./PromptEditor";
 import "./StatusBar";
 import "./CommandPicker";
 import "./ActionPalette";
+import "./AuthDialog";
 import "./ProjectDialog";
 import "./WorkspacePanel";
 import { appStyles } from "./shared";
@@ -40,6 +42,11 @@ export class PiWebApp extends LitElement {
     () => this.state,
     (patch) => { this.setState(patch); },
     () => { this.updateUrl(); },
+  );
+  private readonly auth = new AuthController(
+    () => this.state,
+    (patch) => { this.setState(patch); },
+    (status) => { this.sessions.applySessionStatus(status); },
   );
   private readonly workspaces = new WorkspaceController(
     () => this.state,
@@ -103,6 +110,7 @@ export class PiWebApp extends LitElement {
     window.removeEventListener("keydown", this.onKeyDown);
     this.mobileNavigationMedia?.removeEventListener("change", this.onMobileNavigationMediaChange);
     this.keyboard.reset();
+    this.auth.dispose();
     this.sessions.dispose();
     this.realtime.close();
     this.git.dispose();
@@ -327,6 +335,8 @@ export class PiWebApp extends LitElement {
       openActionPalette: () => { this.setState({ actionPaletteOpen: true }); },
       focusPrompt: () => { this.promptEditor?.focusInput(); },
       addProject: () => { this.setState({ projectDialogOpen: true }); },
+      configureAuth: () => this.auth.openLogin(),
+      logoutAuth: () => this.auth.openLogout(),
       selectMainView: (view) => { this.selectMainView(view); },
       selectWorkspaceTool: (tool) => { this.openWorkspaceTool(tool); },
       refreshFiles: () => this.files.refreshFiles(),
@@ -384,6 +394,11 @@ export class PiWebApp extends LitElement {
     if (isThinkingLevel(value)) await this.sessions.setThinkingLevel(value);
   }
 
+  private sendPrompt(text: string, streamingBehavior?: "steer" | "followUp"): void {
+    if (streamingBehavior === undefined && this.auth.handleSlashCommand(text)) return;
+    void this.sessions.send(text, streamingBehavior);
+  }
+
   override render() {
     const state = this.state;
     return html`
@@ -401,11 +416,12 @@ export class PiWebApp extends LitElement {
           <div class="mobile-navigation-panel">${this.isMobileNavigationLayout ? this.renderNavigationPanel(true) : null}</div>
           ${state.selectedSession ? html`
             <chat-view .sessionId=${state.selectedSession.id} .messages=${state.messages} .messageStart=${state.messagePageStart} .messageTotal=${state.messagePageTotal} .hasMore=${state.messagePageStart > 0} .loadingMore=${state.isLoadingEarlierMessages} .isReceivingPartialStream=${state.isReceivingPartialStream} .isCompacting=${state.status?.isCompacting === true} .pendingMessageCount=${state.status?.pendingMessageCount ?? 0} .status=${state.status} .activity=${state.activity} .onLoadMore=${() => this.withChatPrependTransition(() => this.sessions.loadEarlierMessages())}></chat-view>
-            <prompt-editor .sessionId=${state.selectedSession.id} .cwd=${state.selectedWorkspace?.path} .disabled=${state.selectedSession.archived === true} .canSteer=${state.status?.isStreaming === true} .isCompacting=${state.status?.isCompacting === true} .canStop=${state.status?.isStreaming === true || state.status?.isBashRunning === true || state.status?.isCompacting === true || (state.status?.pendingMessageCount ?? 0) > 0} .status=${state.status} .onSend=${(text: string, streamingBehavior?: "steer" | "followUp") => this.sessions.send(text, streamingBehavior)} .onStop=${() => this.sessions.stopActiveWork()} .onSelectModel=${() => { void this.openModelDialog(); }} .onSelectThinking=${() => { void this.openThinkingDialog(); }}></prompt-editor>
+            <prompt-editor .sessionId=${state.selectedSession.id} .cwd=${state.selectedWorkspace?.path} .disabled=${state.selectedSession.archived === true} .canSteer=${state.status?.isStreaming === true} .isCompacting=${state.status?.isCompacting === true} .canStop=${state.status?.isStreaming === true || state.status?.isBashRunning === true || state.status?.isCompacting === true || (state.status?.pendingMessageCount ?? 0) > 0} .status=${state.status} .onSend=${(text: string, streamingBehavior?: "steer" | "followUp") => { this.sendPrompt(text, streamingBehavior); }} .onStop=${() => this.sessions.stopActiveWork()} .onSelectModel=${() => { void this.openModelDialog(); }} .onSelectThinking=${() => { void this.openThinkingDialog(); }}></prompt-editor>
             <status-bar .status=${state.status} .workspace=${state.selectedWorkspace} .workspaceLabelItems=${state.selectedWorkspace === undefined ? [] : this.plugins.getWorkspaceLabelItems(state, state.selectedWorkspace)}></status-bar>
             ${state.commandDialog !== undefined ? html`<command-picker .title=${state.commandDialog.title} .options=${state.commandDialog.options} .onPick=${(value: string) => this.sessions.respondToCommand(state.commandDialog?.requestId ?? "", value)} .onCancel=${() => { this.sessions.cancelCommand(); }}></command-picker>` : null}
             ${state.modelDialog !== undefined ? html`<command-picker title=${state.modelDialog.title} .searchable=${true} .options=${state.modelDialog.options} .selectedValue=${state.modelDialog.selectedValue} .onPick=${(value: string) => { void this.pickModel(value); }} .onCancel=${() => { this.setState({ modelDialog: undefined }); }}></command-picker>` : null}
             ${state.thinkingDialog !== undefined ? html`<command-picker title=${state.thinkingDialog.title} .options=${state.thinkingDialog.options} .selectedValue=${state.thinkingDialog.selectedValue} .onPick=${(value: string) => { void this.pickThinking(value); }} .onCancel=${() => { this.setState({ thinkingDialog: undefined }); }}></command-picker>` : null}
+            ${state.authDialog !== undefined ? html`<auth-dialog .state=${state.authDialog} .onChooseMethod=${(authType: "oauth" | "api_key") => { void this.auth.chooseLoginMethod(authType); }} .onSelectProvider=${(providerId: string, authType: "oauth" | "api_key") => { void this.auth.selectLoginProvider(providerId, authType); }} .onApiKeyInput=${(value: string) => { this.auth.updateApiKey(value); }} .onSaveApiKey=${() => { void this.auth.saveApiKey(); }} .onLogoutProvider=${(providerId: string) => { void this.auth.logoutProvider(providerId); }} .onOAuthInput=${(value: string) => { this.auth.updateOAuthInput(value); }} .onOAuthRespond=${(value?: string) => { void this.auth.respondOAuth(value); }} .onOAuthCancel=${() => { void this.auth.cancelOAuth(); }} .onCancel=${() => { this.auth.closeDialog(); }}></auth-dialog>` : null}
           ` : html`<div class="empty">Select or start a session.</div>`}
         </main>
         ${this.renderWorkspacePanel()}

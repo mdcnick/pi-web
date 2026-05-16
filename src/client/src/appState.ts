@@ -1,4 +1,4 @@
-import type { CommandOption, CommandResult, FileContentResponse, FileTreeEntry, GitDiffResponse, GitStatusResponse, Project, SessionActivity, SessionInfo, SessionStatus, Workspace } from "./api";
+import type { AuthProviderOption, CommandOption, CommandResult, FileContentResponse, FileTreeEntry, GitDiffResponse, GitStatusResponse, OAuthFlowState, Project, SessionActivity, SessionInfo, SessionStatus, Workspace } from "./api";
 import type { ChatLine } from "./components/shared";
 import type { QualifiedContributionId } from "./plugins/types";
 
@@ -21,6 +21,7 @@ export interface AppState {
   commandDialog: Extract<CommandResult, { type: "select" }> | undefined;
   modelDialog: { title: string; options: CommandOption[]; selectedValue?: string } | undefined;
   thinkingDialog: { title: string; options: CommandOption[]; selectedValue?: string } | undefined;
+  authDialog: AuthDialogState | undefined;
   actionPaletteOpen: boolean;
   projectDialogOpen: boolean;
   workspaceTool: QualifiedContributionId;
@@ -38,6 +39,13 @@ export interface AppState {
   activeTerminalCount: number;
   error: string;
 }
+
+export type AuthDialogState =
+  | { step: "method" }
+  | { step: "providers"; mode: "login"; authType?: "oauth" | "api_key"; providers: AuthProviderOption[] }
+  | { step: "apiKey"; provider: AuthProviderOption; value: string; saving?: boolean; error?: string }
+  | { step: "oauth"; flow: OAuthFlowState; responding?: boolean; inputValue?: string; error?: string }
+  | { step: "logout"; providers: AuthProviderOption[] };
 
 export function initialAppState(): AppState {
   return {
@@ -59,6 +67,7 @@ export function initialAppState(): AppState {
     commandDialog: undefined,
     modelDialog: undefined,
     thinkingDialog: undefined,
+    authDialog: undefined,
     actionPaletteOpen: false,
     projectDialogOpen: false,
     workspaceTool: "core:workspace.files",

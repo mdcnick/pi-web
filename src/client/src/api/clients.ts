@@ -5,6 +5,7 @@ import {
   parseAborted,
   parseAccepted,
   parseArchived,
+  parseAuthProvidersResponse,
   parseClosed,
   parseCommandResult,
   parseDetached,
@@ -15,6 +16,7 @@ import {
   parseGitStatusResponse,
   parseMessagePage,
   parseModelSelectionResponse,
+  parseOAuthFlowState,
   parseProject,
   parseRestored,
   parseSessionInfo,
@@ -61,6 +63,19 @@ export const sessionsApi = {
   archive: (sessionId: string) => request(`/api/sessions/${sessionId}/archive`, parseArchived, { method: "POST" }),
   restore: (sessionId: string) => request(`/api/sessions/${sessionId}/restore`, parseRestored, { method: "POST" }),
   detachParent: (sessionId: string) => request(`/api/sessions/${sessionId}/detach-parent`, parseDetached, { method: "POST" }),
+  authProviders: (options?: { mode?: "login" | "logout"; authType?: "oauth" | "api_key" }) => {
+    const params = new URLSearchParams();
+    if (options?.mode !== undefined) params.set("mode", options.mode);
+    if (options?.authType !== undefined) params.set("authType", options.authType);
+    const query = params.toString();
+    return request(`/api/auth/providers${query === "" ? "" : `?${query}`}`, parseAuthProvidersResponse);
+  },
+  saveApiKey: (providerId: string, key: string) => request("/api/auth/api-key", parseAccepted, { method: "POST", body: JSON.stringify({ providerId, key }) }),
+  logoutProvider: (providerId: string) => request("/api/auth/logout", parseAccepted, { method: "POST", body: JSON.stringify({ providerId }) }),
+  startOAuthLogin: (providerId: string) => request("/api/auth/oauth", parseOAuthFlowState, { method: "POST", body: JSON.stringify({ providerId }) }),
+  oauthFlow: (flowId: string) => request(`/api/auth/oauth/${encodeURIComponent(flowId)}`, parseOAuthFlowState),
+  respondOAuthFlow: (flowId: string, requestId: string, value: string) => request(`/api/auth/oauth/${encodeURIComponent(flowId)}/respond`, parseOAuthFlowState, { method: "POST", body: JSON.stringify({ requestId, value }) }),
+  cancelOAuthFlow: (flowId: string) => request(`/api/auth/oauth/${encodeURIComponent(flowId)}/cancel`, parseOAuthFlowState, { method: "POST" }),
 };
 
 export const terminalsApi = {

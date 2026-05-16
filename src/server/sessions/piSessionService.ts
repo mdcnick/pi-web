@@ -17,19 +17,22 @@ import { BUILTIN_COMMANDS } from "./builtinCommands.js";
 import { SessionCommandService } from "./sessionCommandService.js";
 import { SessionArchiveStore } from "./sessionArchiveStore.js";
 import type { ActiveSession } from "./sessionRuntimeStore.js";
+import type { AuthChange } from "./authService.js";
 import { fallbackSessionName, generateShortSessionName } from "./sessionNameGenerator.js";
 
 function noop(): void {
   // Intentionally empty default unsubscribe callback.
 }
 
+function authLossWarningKey(sessionId: string, provider: string, modelId: string): string {
+  return `${sessionId}:${provider}/${modelId}`;
+}
+
 type SessionArchiveRepository = Pick<SessionArchiveStore, "list" | "archive" | "restore" | "isArchived">;
 type SessionManagerGateway = Pick<typeof SessionManager, "list" | "create" | "listAll" | "open">;
 type CreateAgentRuntime = typeof createAgentSessionRuntime;
 
-function createDefaultRuntimeFactory(): CreateAgentSessionRuntimeFactory {
-  const authStorage = AuthStorage.create();
-  const modelRegistry = ModelRegistry.create(authStorage);
+function createDefaultRuntimeFactory(authStorage: AuthStorage, modelRegistry: ReturnType<typeof ModelRegistry.create>): CreateAgentSessionRuntimeFactory {
   return async ({ cwd, agentDir, sessionManager, sessionStartEvent }) => {
     const services = await createAgentSessionServices({ cwd, agentDir, authStorage, modelRegistry });
     const options = sessionStartEvent === undefined
@@ -55,6 +58,7 @@ export class PiSessionService {
   private readonly activities = new Map<string, { phase: "active" | "idle" | "error"; label: string; detail?: string; at: string }>();
   private readonly heartbeat: NodeJS.Timeout;
   private readonly commandService: SessionCommandService;
+  private readonly authLossWarnings = new Set<string>();
   private readonly archiveStore: SessionArchiveRepository;
   private readonly agentDir: string;
   private readonly sessionManager: SessionManagerGateway;
@@ -66,9 +70,9 @@ export class PiSessionService {
     this.archiveStore = deps.archiveStore ?? new SessionArchiveStore();
     this.agentDir = deps.agentDir ?? getAgentDir();
     this.sessionManager = deps.sessionManager ?? SessionManager;
-    this.createRuntime = deps.createRuntime ?? createDefaultRuntimeFactory();
-    this.createAgentRuntime = deps.createAgentRuntime ?? createAgentSessionRuntime;
     this.modelRegistry = deps.modelRegistry ?? ModelRegistry.create(AuthStorage.create());
+    this.createRuntime = deps.createRuntime ?? createDefaultRuntimeFactory(this.modelRegistry.authStorage, this.modelRegistry);
+    this.createAgentRuntime = deps.createAgentRuntime ?? createAgentSessionRuntime;
     this.heartbeat = setInterval(() => { this.publishHeartbeats(); }, deps.heartbeatIntervalMs ?? 2000);
     this.commandService = new SessionCommandService(
       (sessionId) => this.getActive(sessionId),
@@ -96,6 +100,7 @@ export class PiSessionService {
     const activeSessions = Array.from(new Set(this.active.values()));
     this.active.clear();
     this.activities.clear();
+    this.authLossWarnings.clear();
     await Promise.all(activeSessions.map(async (active) => {
       active.unsubscribe();
       await active.runtime.session.abort();
@@ -320,6 +325,7 @@ export class PiSessionService {
     void active.runtime.session.abort().finally(() => active.runtime.dispose());
     this.active.delete(sessionId);
     this.activities.delete(sessionId);
+    this.clearAuthLossWarningsForSession(sessionId);
   }
 
   private async assertWritable(sessionId: string): Promise<void> {
@@ -382,6 +388,43 @@ export class PiSessionService {
     if (name === undefined || session.sessionName !== undefined) return;
     session.setSessionName(name);
     this.publishSessionName(session);
+  }
+
+  applyAuthChange(change: AuthChange = {}): void {
+    this.modelRegistry.refresh();
+    for (const active of this.active.values()) {
+      const { session } = active.runtime;
+      session.modelRegistry.refresh();
+      this.syncCurrentModelAuthWarning(session, change.removedProviderId);
+      this.publishStatus(session);
+    }
+  }
+
+  private syncCurrentModelAuthWarning(session: AgentSession, removedProviderId: string | undefined): void {
+    const model = session.model;
+    if (model === undefined) return;
+    if (model.provider === "unknown" && model.id === "unknown") return;
+    const warningKey = authLossWarningKey(session.sessionId, model.provider, model.id);
+    const registered = session.modelRegistry.find(model.provider, model.id);
+    if (registered === undefined) return;
+    if (session.modelRegistry.hasConfiguredAuth(registered)) {
+      this.authLossWarnings.delete(warningKey);
+      return;
+    }
+    if (removedProviderId === undefined || model.provider !== removedProviderId || this.authLossWarnings.has(warningKey)) return;
+    this.authLossWarnings.add(warningKey);
+    this.events.publish(session.sessionId, {
+      type: "command.output",
+      level: "error",
+      message: `Authentication for ${model.provider}/${model.id} was removed. Use /model to select another model.`,
+    });
+  }
+
+  private clearAuthLossWarningsForSession(sessionId: string): void {
+    const prefix = `${sessionId}:`;
+    for (const key of this.authLossWarnings) {
+      if (key.startsWith(prefix)) this.authLossWarnings.delete(key);
+    }
   }
 
   private publishSessionName(session: AgentSession): void {
