@@ -48,8 +48,8 @@ export class PiWebApp extends LitElement {
   @state() private state: AppState = initialAppState();
   @query("chat-view") private chatView?: ChatView;
   @query("prompt-editor") private promptEditor?: PromptEditor;
-  @query(".context-items") private contextItems?: HTMLElement;
-  @query(".mobile-tabs") private mobileTabs?: HTMLElement;
+  @query(".context-items") private contextItems?: HTMLElement | null;
+  @query(".mobile-tabs") private mobileTabs?: HTMLElement | null;
 
   private readonly sessions = new SessionController(
     () => this.state,
@@ -696,7 +696,7 @@ export class PiWebApp extends LitElement {
   }
 
   private observeContextItems(): void {
-    const contextItems = this.contextItems;
+    const contextItems = this.contextItemsElement();
     if (this.observedContextItems === contextItems) return;
     this.contextItemsResizeObserver?.disconnect();
     this.observedContextItems = contextItems;
@@ -709,7 +709,7 @@ export class PiWebApp extends LitElement {
   }
 
   private updateContextScrollState(): void {
-    const contextItems = this.contextItems;
+    const contextItems = this.contextItemsElement();
     const maxScrollLeft = contextItems === undefined ? 0 : Math.max(0, contextItems.scrollWidth - contextItems.clientWidth);
     const canScrollLeft = contextItems !== undefined && contextItems.scrollLeft > 1;
     const canScrollRight = contextItems !== undefined && maxScrollLeft - contextItems.scrollLeft > 1;
@@ -717,8 +717,13 @@ export class PiWebApp extends LitElement {
     if (this.contextCanScrollRight !== canScrollRight) this.contextCanScrollRight = canScrollRight;
   }
 
+  private contextItemsElement(): HTMLElement | undefined {
+    const contextItems = this.contextItems;
+    return contextItems instanceof HTMLElement ? contextItems : undefined;
+  }
+
   private observeMobileTabs(): void {
-    const mobileTabs = this.mobileTabs;
+    const mobileTabs = this.mobileTabsElement();
     if (this.observedMobileTabs === mobileTabs) return;
     this.mobileTabsResizeObserver?.disconnect();
     this.observedMobileTabs = mobileTabs;
@@ -731,12 +736,17 @@ export class PiWebApp extends LitElement {
   }
 
   private updateMobileTabsScrollState(): void {
-    const mobileTabs = this.mobileTabs;
+    const mobileTabs = this.mobileTabsElement();
     const maxScrollLeft = mobileTabs === undefined ? 0 : Math.max(0, mobileTabs.scrollWidth - mobileTabs.clientWidth);
     const canScrollLeft = mobileTabs !== undefined && mobileTabs.scrollLeft > 1;
     const canScrollRight = mobileTabs !== undefined && maxScrollLeft - mobileTabs.scrollLeft > 1;
     if (this.mobileTabsCanScrollLeft !== canScrollLeft) this.mobileTabsCanScrollLeft = canScrollLeft;
     if (this.mobileTabsCanScrollRight !== canScrollRight) this.mobileTabsCanScrollRight = canScrollRight;
+  }
+
+  private mobileTabsElement(): HTMLElement | undefined {
+    const mobileTabs = this.mobileTabs;
+    return mobileTabs instanceof HTMLElement ? mobileTabs : undefined;
   }
 
   override render() {

@@ -18,7 +18,7 @@ const DEFAULT_TERMINAL_SIZE: TerminalSize = { cols: 100, rows: 30 };
 export class TerminalPanel extends LitElement {
   @property({ attribute: false }) workspace: Workspace | undefined;
   @property({ type: Boolean }) autoStart = false;
-  @query(".terminal-host") private terminalHost?: HTMLDivElement;
+  @query(".terminal-host") private terminalHost?: HTMLDivElement | null;
   @state() private terminals: TerminalInfo[] = [];
   @state() private selectedId: string | undefined;
   @state() private loading = false;
@@ -133,15 +133,16 @@ export class TerminalPanel extends LitElement {
 
   private ensureTerminalView(): void {
     const workspace = this.workspace;
-    if (!this.visible || this.terminal !== undefined || this.selectedId === undefined || this.terminalHost === undefined || workspace === undefined) return;
+    const terminalHost = this.terminalHostElement();
+    if (!this.visible || this.terminal !== undefined || this.selectedId === undefined || terminalHost === undefined || workspace === undefined) return;
     const terminal = new Terminal(terminalOptions(this));
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
-    terminal.open(this.terminalHost);
+    terminal.open(terminalHost);
     this.terminal = terminal;
     this.fitAddon = fitAddon;
     this.resizeObserver = new ResizeObserver(() => { this.fitAndNotify(); });
-    this.resizeObserver.observe(this.terminalHost);
+    this.resizeObserver.observe(terminalHost);
     terminal.onData((data) => {
       if (this.suppressTerminalInput) return;
       const filtered = filterTerminalInput(data);
@@ -211,15 +212,21 @@ export class TerminalPanel extends LitElement {
   private measureTerminalSize(): TerminalSize | undefined {
     const currentSize = this.fitTerminal();
     if (currentSize !== undefined) return currentSize;
-    if (this.terminal !== undefined || this.terminalHost === undefined) return undefined;
+    const terminalHost = this.terminalHostElement();
+    if (this.terminal !== undefined || terminalHost === undefined) return undefined;
 
     const measuringTerminal = new Terminal(terminalOptions(this));
     const measuringFitAddon = new FitAddon();
     measuringTerminal.loadAddon(measuringFitAddon);
-    measuringTerminal.open(this.terminalHost);
+    measuringTerminal.open(terminalHost);
     const size = terminalSizeFromDimensions(measuringFitAddon.proposeDimensions());
     measuringTerminal.dispose();
     return size;
+  }
+
+  private terminalHostElement(): HTMLDivElement | undefined {
+    const terminalHost = this.terminalHost;
+    return terminalHost instanceof HTMLDivElement ? terminalHost : undefined;
   }
 
   private applyTerminalTheme(): void {

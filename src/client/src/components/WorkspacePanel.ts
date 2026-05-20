@@ -32,7 +32,7 @@ export class WorkspacePanel extends LitElement {
   @property({ attribute: false }) onSelectDiff: (path: string) => void = () => undefined;
   @property({ type: Number }) activeTerminalCount = 0;
   @property({ type: Boolean }) terminalAutoStart = false;
-  @query(".workspace-header-strip") private workspaceHeaderStrip?: HTMLElement;
+  @query(".workspace-header-strip") private workspaceHeaderStrip?: HTMLElement | null;
   @state() private workspaceHeaderCanScrollLeft = false;
   @state() private workspaceHeaderCanScrollRight = false;
 
@@ -99,7 +99,7 @@ export class WorkspacePanel extends LitElement {
   }
 
   private observeWorkspaceHeaderStrip(): void {
-    const strip = this.workspaceHeaderStrip;
+    const strip = this.workspaceHeaderStripElement();
     if (this.observedWorkspaceHeaderStrip === strip) return;
     this.workspaceHeaderResizeObserver?.disconnect();
     this.observedWorkspaceHeaderStrip = strip;
@@ -112,12 +112,17 @@ export class WorkspacePanel extends LitElement {
   }
 
   private updateWorkspaceHeaderScrollState(): void {
-    const strip = this.workspaceHeaderStrip;
+    const strip = this.workspaceHeaderStripElement();
     const maxScrollLeft = strip === undefined ? 0 : Math.max(0, strip.scrollWidth - strip.clientWidth);
     const canScrollLeft = strip !== undefined && strip.scrollLeft > 1;
     const canScrollRight = strip !== undefined && maxScrollLeft - strip.scrollLeft > 1;
     if (this.workspaceHeaderCanScrollLeft !== canScrollLeft) this.workspaceHeaderCanScrollLeft = canScrollLeft;
     if (this.workspaceHeaderCanScrollRight !== canScrollRight) this.workspaceHeaderCanScrollRight = canScrollRight;
+  }
+
+  private workspaceHeaderStripElement(): HTMLElement | undefined {
+    const strip = this.workspaceHeaderStrip;
+    return strip instanceof HTMLElement ? strip : undefined;
   }
 
   private createPanelContext(workspace: Workspace): WorkspacePanelContext {
