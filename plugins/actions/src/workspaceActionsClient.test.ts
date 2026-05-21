@@ -34,14 +34,24 @@ describe("workspace actions client", () => {
     });
   });
 
+  it("treats a missing optional actions config as unconfigured", async () => {
+    const fetcher: FetchLike = () => Promise.resolve(new Response(JSON.stringify({ error: "Path does not exist" }), { status: 400 }));
+
+    await expect(loadWorkspaceActionsConfig(workspace, { fetch: fetcher })).resolves.toEqual({
+      kind: "missing",
+      message: "No workspace actions configured here.",
+      hint: `${ACTIONS_CONFIG_PATH} is optional. Create it in this workspace if you want custom actions.`,
+    });
+  });
+
   it("returns a visible unavailable state instead of throwing on request failures", async () => {
     const fetcher: FetchLike = () => Promise.resolve(new Response(JSON.stringify({ error: "nope" }), { status: 400 }));
 
     await expect(loadWorkspaceActionsConfig(workspace, { fetch: fetcher })).resolves.toMatchObject({
       kind: "unavailable",
-      message: `No valid ${ACTIONS_CONFIG_PATH} found.`,
-      hint: `Add or fix ${ACTIONS_CONFIG_PATH}, then click Refresh.`,
-      detail: `Unable to read ${ACTIONS_CONFIG_PATH}: HTTP 400`,
+      message: "Could not load workspace actions.",
+      hint: `Fix ${ACTIONS_CONFIG_PATH}, then click Refresh.`,
+      detail: `Unable to read ${ACTIONS_CONFIG_PATH}: HTTP 400: nope`,
     });
   });
 

@@ -6,7 +6,7 @@ The plugin adds an **Actions** workspace tab. Actions create a new Pi Web termin
 
 ## Configuration
 
-Create `.pi-web/actions.json` in the workspace root:
+Create `.pi-web/actions.json` in the workspace root where you want actions. The file is optional per workspace; workspaces without it simply show no actions.
 
 ```json
 {

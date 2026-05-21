@@ -1,13 +1,18 @@
 import type { Workspace } from "@jmfederico/pi-web/plugin-api";
 import { ACTIONS_CONFIG_PATH, parseActionsConfigText, type WorkspaceActionsConfig } from "./config.js";
 
-export const actionsConfigUnavailableMessage = `No valid ${ACTIONS_CONFIG_PATH} found.`;
-export const actionsConfigRefreshHint = `Add or fix ${ACTIONS_CONFIG_PATH}, then click Refresh.`;
+export const actionsConfigMissingMessage = "No workspace actions configured here.";
+export const actionsConfigMissingHint = `${ACTIONS_CONFIG_PATH} is optional. Create it in this workspace if you want custom actions.`;
+export const actionsConfigUnavailableMessage = "Could not load workspace actions.";
+export const actionsConfigRefreshHint = `Fix ${ACTIONS_CONFIG_PATH}, then click Refresh.`;
+
+const missingWorkspaceFileError = "Path does not exist";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export type WorkspaceActionsConfigLoadResult =
   | { kind: "loaded"; config: WorkspaceActionsConfig }
+  | { kind: "missing"; message: string; hint: string }
   | { kind: "unavailable"; message: string; hint: string; detail?: string };
 
 interface WorkspaceFileResponse {
@@ -27,7 +32,12 @@ export async function loadWorkspaceActionsConfig(
     return unavailable(`Unable to read ${ACTIONS_CONFIG_PATH}: ${formatUnknownError(error)}`);
   }
 
-  if (!response.ok) return unavailable(`Unable to read ${ACTIONS_CONFIG_PATH}: HTTP ${String(response.status)}`);
+  if (!response.ok) {
+    const errorMessage = await readResponseErrorMessage(response);
+    if (errorMessage === missingWorkspaceFileError) return missing();
+    const responseSummary = errorMessage === undefined ? `HTTP ${String(response.status)}` : `HTTP ${String(response.status)}: ${errorMessage}`;
+    return unavailable(`Unable to read ${ACTIONS_CONFIG_PATH}: ${responseSummary}`);
+  }
 
   let body: unknown;
   try {
@@ -59,6 +69,14 @@ export function parseWorkspaceFileResponse(value: unknown): WorkspaceFileRespons
   return { content, truncated, binary };
 }
 
+function missing(): WorkspaceActionsConfigLoadResult {
+  return {
+    kind: "missing",
+    message: actionsConfigMissingMessage,
+    hint: actionsConfigMissingHint,
+  };
+}
+
 function unavailable(detail: string): WorkspaceActionsConfigLoadResult {
   return {
     kind: "unavailable",
@@ -66,6 +84,17 @@ function unavailable(detail: string): WorkspaceActionsConfigLoadResult {
     hint: actionsConfigRefreshHint,
     detail,
   };
+}
+
+async function readResponseErrorMessage(response: Response): Promise<string | undefined> {
+  try {
+    const body: unknown = await response.json();
+    if (!isRecord(body)) return undefined;
+    const error = body["error"];
+    return typeof error === "string" ? error : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function formatUnknownError(error: unknown): string {

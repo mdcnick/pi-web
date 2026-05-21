@@ -2,7 +2,7 @@ import type { Workspace } from "@jmfederico/pi-web/plugin-api";
 import { ACTIONS_CONFIG_PATH, type WorkspaceAction } from "./config.js";
 import { createWorkspaceTerminal, sendTerminalCommand } from "./terminalDispatcher.js";
 import { requestPiWebRender } from "./piWebPrivateUi.js";
-import { loadWorkspaceActionsConfig, type WorkspaceActionsConfigLoadResult } from "./workspaceActionsClient.js";
+import { actionsConfigRefreshHint, actionsConfigUnavailableMessage, loadWorkspaceActionsConfig, type WorkspaceActionsConfigLoadResult } from "./workspaceActionsClient.js";
 
 export const actionsPanelTagName = "pi-web-actions-panel";
 
@@ -100,8 +100,9 @@ class PiWebActionsPanel extends HTMLElement {
 
   private renderConfigState(state: ConfigState): string {
     if (state.kind === "loading") return `<p class="muted">Loading ${escapeHtml(ACTIONS_CONFIG_PATH)}…</p>${this.renderStatus()}`;
+    if (state.kind === "missing") return `${renderMissingState(state)}${this.renderStatus()}`;
     if (state.kind === "unavailable") return `${renderUnavailableState(state)}${this.renderStatus()}`;
-    if (state.config.actions.length === 0) return `<p class="muted">No actions configured in ${escapeHtml(ACTIONS_CONFIG_PATH)}.</p>${this.renderStatus()}`;
+    if (state.config.actions.length === 0) return `<p class="muted">No actions are defined in ${escapeHtml(ACTIONS_CONFIG_PATH)}. Add actions to the file, then click Refresh.</p>${this.renderStatus()}`;
     return `
       <p class="muted">Actions create a new workspace terminal, send the command, then switch to that terminal. Edit ${escapeHtml(ACTIONS_CONFIG_PATH)} and click Refresh to reload.</p>
       ${renderActionGroups(state.config.actions, this.runningActionId)}
@@ -185,8 +186,8 @@ async function refreshWorkspaceConfig(workspace: Workspace): Promise<ConfigState
   const key = cacheKeyForWorkspace(workspace);
   const state = await loadWorkspaceActionsConfig(workspace).catch((error: unknown): ConfigState => ({
     kind: "unavailable",
-    message: `No valid ${ACTIONS_CONFIG_PATH} found.`,
-    hint: `Add or fix ${ACTIONS_CONFIG_PATH}, then click Refresh.`,
+    message: actionsConfigUnavailableMessage,
+    hint: actionsConfigRefreshHint,
     detail: error instanceof Error ? error.message : String(error),
   }));
   configCache.set(key, state);
@@ -197,6 +198,10 @@ async function refreshWorkspaceConfig(workspace: Workspace): Promise<ConfigState
 
 function cacheKeyForWorkspace(workspace: Workspace): string {
   return `${workspace.projectId}:${workspace.id}`;
+}
+
+function renderMissingState(state: Extract<ConfigState, { kind: "missing" }>): string {
+  return `<div class="empty-state"><strong>${escapeHtml(state.message)}</strong><p>${escapeHtml(state.hint)}</p></div>`;
 }
 
 function renderUnavailableState(state: Extract<ConfigState, { kind: "unavailable" }>): string {
@@ -268,6 +273,8 @@ function actionStyles(): string {
       button { border: 1px solid var(--pi-accent-border); border-radius: 7px; background: var(--pi-accent); color: var(--pi-bg); cursor: pointer; padding: 6px 10px; font: inherit; }
       button.secondary { border-color: var(--pi-border); background: var(--pi-surface); color: var(--pi-text); }
       button:disabled { cursor: wait; opacity: 0.65; }
+      .empty-state { border: 1px dashed var(--pi-border-muted); border-radius: 8px; color: var(--pi-muted); padding: 12px; }
+      .empty-state p { margin: 6px 0 0; }
       .status { border: 1px solid var(--pi-border); border-radius: 8px; padding: 10px; }
       .status.info { border-color: var(--pi-accent-border); background: var(--pi-bg-overlay-soft); }
       .status.success { border-color: var(--pi-success-border); background: var(--pi-success-surface); color: var(--pi-success); }
