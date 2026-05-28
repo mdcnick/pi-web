@@ -5,6 +5,9 @@ import { FitAddon, type ITerminalDimensions } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { terminalSocket, terminalsApi, type TerminalCommandRun, type TerminalInfo, type Workspace } from "../api";
 import { selectFallbackTerminal, selectPreferredTerminal } from "../controllers/terminalSelection";
+import { createTerminalSoftKeysDefaultEnvironmentMedia, hasTerminalSoftKeysPreference, initialTerminalSoftKeysEnabled, isTerminalSoftKeysDefaultEnvironment, writeTerminalSoftKeysPreference } from "../terminalSoftKeysPreference";
+import "./TerminalSoftKeys";
+import type { TerminalSoftKeyInputOptions } from "./TerminalSoftKeys";
 
 const TERMINAL_OPTIONS_BASE: ITerminalOptions = {
   cursorBlink: true,
@@ -31,6 +34,8 @@ export class TerminalPanel extends LitElement {
   @state() private visible = false;
   @state() private cancellingRunIds: string[] = [];
   @state() private continuingTerminalIds: string[] = [];
+  @state() private defaultSoftKeysEnvironment = false;
+  @state() private softKeysEnabled = initialTerminalSoftKeysEnabled();
 
   private terminal: Terminal | undefined;
   private fitAddon: FitAddon | undefined;
@@ -43,9 +48,16 @@ export class TerminalPanel extends LitElement {
   private loadedCwd: string | undefined;
   private autoStartConsumedCwd: string | undefined;
   private commandRunPollTimer: number | undefined;
+  private readonly softKeysDefaultEnvironmentMedia = createTerminalSoftKeysDefaultEnvironmentMedia();
+  private softKeysPreferenceStored = hasTerminalSoftKeysPreference();
+  private readonly onSoftKeysDefaultEnvironmentChange = () => {
+    this.syncDefaultSoftKeysEnvironment();
+  };
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.syncDefaultSoftKeysEnvironment();
+    this.softKeysDefaultEnvironmentMedia?.addEventListener("change", this.onSoftKeysDefaultEnvironmentChange);
     this.themeObserver = new MutationObserver(() => { this.applyTerminalTheme(); });
     this.themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
   }
@@ -62,9 +74,22 @@ export class TerminalPanel extends LitElement {
     this.intersectionObserver = undefined;
     this.themeObserver?.disconnect();
     this.themeObserver = undefined;
+    this.softKeysDefaultEnvironmentMedia?.removeEventListener("change", this.onSoftKeysDefaultEnvironmentChange);
     this.updateCommandRunPolling(false);
     this.disposeTerminalView();
     super.disconnectedCallback();
+  }
+
+  private syncDefaultSoftKeysEnvironment(): void {
+    const nextDefaultEnvironment = isTerminalSoftKeysDefaultEnvironment(this.softKeysDefaultEnvironmentMedia);
+    const previousSoftKeysEnabled = this.softKeysEnabled;
+    this.defaultSoftKeysEnvironment = nextDefaultEnvironment;
+    if (!this.softKeysPreferenceStored) this.softKeysEnabled = nextDefaultEnvironment;
+    if (this.softKeysEnabled !== previousSoftKeysEnabled) this.scheduleFitAndNotify();
+  }
+
+  private scheduleFitAndNotify(): void {
+    void this.updateComplete.then(() => { this.fitAndNotify(); });
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
@@ -286,8 +311,7 @@ export class TerminalPanel extends LitElement {
     this.resizeObserver.observe(terminalHost);
     terminal.onData((data) => {
       if (this.suppressTerminalInput) return;
-      const filtered = filterTerminalInput(data);
-      if (filtered !== "") this.send({ type: "input", data: filtered });
+      this.sendTerminalInput(data);
     });
     const initialSize = this.fitTerminal();
     this.connectSocket(workspace.projectId, workspace.id, this.selectedId, terminal, initialSize);
@@ -375,6 +399,23 @@ export class TerminalPanel extends LitElement {
     if (this.terminal !== undefined) this.terminal.options.theme = terminalTheme(this);
   }
 
+  private sendTerminalInput(data: string): void {
+    const filtered = filterTerminalInput(data);
+    if (filtered !== "") this.send({ type: "input", data: filtered });
+  }
+
+  private sendSoftKeyInput(data: string, options: TerminalSoftKeyInputOptions): void {
+    this.sendTerminalInput(data);
+    if (options.refocus) this.focusTerminal();
+  }
+
+  private focusTerminal(): void {
+    const terminal = this.terminal;
+    if (terminal === undefined) return;
+    terminal.focus();
+    requestAnimationFrame(() => { terminal.focus(); });
+  }
+
   private send(message: { type: "input"; data: string } | { type: "resize"; cols: number; rows: number }): void {
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message));
   }
@@ -422,10 +463,61 @@ export class TerminalPanel extends LitElement {
     return null;
   }
 
+  private selectedTerminalAcceptsInput(): boolean {
+    const terminal = this.selectedTerminalInfo();
+    return terminal !== undefined && !terminal.exited;
+  }
+
+  private shouldShowSoftKeys(): boolean {
+    return this.selectedTerminalAcceptsInput() && this.softKeysEnabled;
+  }
+
+  private shouldShowSoftKeysToggle(): boolean {
+    return this.selectedTerminalAcceptsInput();
+  }
+
+  private toggleSoftKeys(): void {
+    this.softKeysEnabled = !this.softKeysEnabled;
+    this.softKeysPreferenceStored = true;
+    writeTerminalSoftKeysPreference(this.softKeysEnabled);
+    this.scheduleFitAndNotify();
+  }
+
+  private renderSoftKeysToggle() {
+    if (!this.shouldShowSoftKeysToggle()) return null;
+    return html`
+      <button
+        type="button"
+        class=${this.softKeysEnabled ? "soft-keys-toggle selected" : "soft-keys-toggle"}
+        title=${this.softKeysEnabled ? "Hide terminal soft keys" : "Show terminal soft keys"}
+        aria-label=${this.softKeysEnabled ? "Hide terminal soft keys" : "Show terminal soft keys"}
+        aria-pressed=${String(this.softKeysEnabled)}
+        @click=${() => { this.toggleSoftKeys(); }}
+      >
+        <svg class="keyboard-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+          <path d="M7 9h.01M10 9h.01M13 9h.01M16 9h.01M7 12h.01M10 12h.01M13 12h.01M16 12h.01M8 16h8"></path>
+        </svg>
+        <span>Keys</span>
+      </button>
+    `;
+  }
+
+  private renderSoftKeys() {
+    return html`
+      <terminal-soft-keys
+        .modes=${this.terminal?.modes}
+        .refocusOnClick=${!this.defaultSoftKeysEnvironment}
+        .onInput=${(data: string, options: TerminalSoftKeyInputOptions) => { this.sendSoftKeyInput(data, options); }}
+      ></terminal-soft-keys>
+    `;
+  }
+
   override render() {
     return html`
       <section class="terminal-shell">
         <div class="terminal-tabs">
+          ${this.renderSoftKeysToggle()}
           ${this.terminals.map((terminal) => html`
             <button class=${this.selectedId === terminal.id ? "selected" : ""} @click=${() => { this.selectTerminal(terminal.id); }}>
               <span>${terminal.name}${terminal.exited ? " · exited" : ""}</span>
@@ -436,6 +528,7 @@ export class TerminalPanel extends LitElement {
         </div>
         ${this.error === undefined ? null : html`<p class="error">${this.error}</p>`}
         ${this.renderCommandRunNotice()}
+        ${this.shouldShowSoftKeys() ? this.renderSoftKeys() : null}
         ${this.loading ? html`<p class="muted">Loading terminals…</p>` : null}
         <div class="terminal-host"></div>
       </section>
@@ -449,6 +542,8 @@ export class TerminalPanel extends LitElement {
     button { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 180px; border: 1px solid var(--pi-border); border-radius: 7px; background: var(--pi-surface); color: var(--pi-text); padding: 5px 7px; cursor: pointer; }
     button.selected { border-color: var(--pi-accent); background: var(--pi-selection-bg); }
     button.new { flex: 0 0 auto; color: var(--pi-muted); }
+    .soft-keys-toggle { flex: 0 0 auto; }
+    .soft-keys-toggle .keyboard-icon { flex: 0 0 auto; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
     button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     button small { color: var(--pi-muted); font-size: 14px; line-height: 1; }
     button small:hover { color: var(--pi-danger); }
