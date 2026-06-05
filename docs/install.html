@@ -28,6 +28,7 @@
         <a class="brand" href="./" aria-label="PI WEB home">PI WEB</a>
         <div class="nav-links">
           <a href="remote-first.html">Remote-first</a>
+          <a href="machines.html">Fleet</a>
           <a href="install.html" aria-current="page">Install</a>
           <a href="plugins.html">Plugins</a>
           <a href="faq.html">FAQ</a>
@@ -70,6 +71,7 @@
             <a href="#pi-package">Install through Pi</a>
             <a href="#manual-run">WSL / manual run</a>
             <a href="#remote-access">Remote access</a>
+            <a href="#federated-machines">Federated machines</a>
             <a href="#manage-services">Manage services</a>
             <a href="#configure">Configure</a>
             <a href="#uninstall">Uninstall</a>
@@ -189,8 +191,25 @@
               <div class="callout danger">
                 PI WEB is designed for trusted users and trusted server paths. Do not expose it directly to the public
                 internet. If you use a VPN or private network, bind PI WEB to the server's VPN/private IP, such as a
-                Tailscale/WireGuard/LAN address, and make sure that network policy limits access. Avoid
+                NetBird/Tailscale/WireGuard/LAN address, and make sure that network policy limits access. Avoid
                 <code>0.0.0.0</code> unless a firewall, VPN, or authenticated reverse proxy strictly controls the port.
+              </div>
+            </section>
+
+            <section id="federated-machines">
+              <h2>Federated machines</h2>
+              <p>
+                To use one PI WEB instance as a gateway to others, install and run PI WEB on each target machine first.
+                Make each target reachable from the gateway through a trusted path, then open the gateway and use
+                <strong>Actions → Add Machine</strong> with the target PI WEB base URL.
+              </p>
+              <p>
+                The remote URL can be reachable through NetBird, Tailscale, WireGuard, LAN, an SSH tunnel, or an authenticated reverse proxy. The
+                browser keeps using the gateway origin while projects, sessions, files, and terminals run on the selected
+                remote runtime.
+              </p>
+              <div class="doc-actions">
+                <a class="button" href="machines.html">Read the fleet guide</a>
               </div>
             </section>
 
@@ -289,6 +308,7 @@
         <div class="footer-links">
           <a href="./">Home</a>
           <a href="remote-first.html">Remote-first</a>
+          <a href="machines.html">Fleet</a>
           <a href="plugins.html">Plugins</a>
           <a href="faq.html">FAQ</a>
           <a href="https://github.com/jmfederico/pi-web">GitHub</a>

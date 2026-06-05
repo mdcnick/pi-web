@@ -131,7 +131,7 @@ Reload the PI WEB browser tab. PI WEB serves plugin modules with an mtime-based 
 
 ## Remote machine plugins
 
-When machine federation is enabled, PI WEB also loads discovered plugins from the selected remote machine. Remote plugins are trusted browser-side code like local plugins, but their contributions are machine-scoped:
+When [machine federation](https://pi-web.dev/machines.html) is enabled, PI WEB also loads discovered plugins from the selected remote machine. Remote plugins are trusted browser-side code like local plugins, but their contributions are machine-scoped:
 
 - actions, workspace panels, and workspace labels only appear while that machine is selected;
 - plugin file and terminal helpers run against that machine;

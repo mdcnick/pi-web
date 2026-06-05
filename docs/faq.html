@@ -28,6 +28,7 @@
         <a class="brand" href="./" aria-label="PI WEB home">PI WEB</a>
         <div class="nav-links">
           <a href="remote-first.html">Remote-first</a>
+          <a href="machines.html">Fleet</a>
           <a href="install.html">Install</a>
           <a href="plugins.html">Plugins</a>
           <a href="faq.html" aria-current="page">FAQ</a>
@@ -71,6 +72,7 @@
             <a href="#systemd-not-found">User service manager is unavailable</a>
             <a href="#cannot-open">I cannot open the web UI</a>
             <a href="#public-internet">Can I expose this publicly?</a>
+            <a href="#remote-machines">How do remote machines work?</a>
             <a href="#laptop-or-server">Laptop or server?</a>
             <a href="#plugins">Can I use local plugins?</a>
             <a href="#sessions-stop">Sessions stop unexpectedly</a>
@@ -189,6 +191,23 @@
               </p>
             </article>
 
+            <article id="remote-machines" class="faq-item">
+              <h2>How do I connect another PI WEB machine?</h2>
+              <p>
+                Install and run PI WEB on the target machine, make its PI WEB URL reachable from the gateway through a
+                trusted path, then open the gateway and choose <strong>Actions → Add Machine</strong>. The browser keeps
+                talking to the gateway while projects, sessions, files, and terminals run on the selected remote runtime.
+              </p>
+              <ul>
+                <li>Use NetBird, Tailscale, WireGuard, private LAN, SSH tunnel, or an authenticated reverse proxy.</li>
+                <li>Remote Pi auth, OAuth state, sessions, terminals, repositories, and plugins stay on the target machine.</li>
+                <li>API-key provider configuration can be proxied, but OAuth login should be completed by opening the remote PI WEB directly.</li>
+                <li>Remote plugins are trusted browser code and only appear while that machine is selected.</li>
+                <li>If the remote reports offline, check that the gateway server can reach the remote URL and try <strong>Actions → Refresh Selected Machine</strong>.</li>
+              </ul>
+              <p><a href="machines.html">Read the fleet guide →</a></p>
+            </article>
+
             <article id="laptop-or-server" class="faq-item">
               <h2>Should I run PI WEB on my laptop or a server?</h2>
               <p>
@@ -251,6 +270,7 @@
         <div class="footer-links">
           <a href="./">Home</a>
           <a href="remote-first.html">Remote-first</a>
+          <a href="machines.html">Fleet</a>
           <a href="install.html">Install</a>
           <a href="plugins.html">Plugins</a>
           <a href="https://github.com/jmfederico/pi-web/issues">Issues</a>
