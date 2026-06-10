@@ -336,7 +336,7 @@ export class SessionList extends LitElement implements KeyboardNavigableSection 
       this.openMenuSessionId = undefined;
       return;
     }
-    this.menuStyle = actionMenuPanelStyle(target);
+    this.menuStyle = actionMenuPanelStyle(target, { constrainTo: "viewport" });
     this.openMenuSessionId = sessionId;
   }
 
