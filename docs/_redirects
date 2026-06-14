@@ -1,0 +1,6 @@
+# Canonical SEO redirects for the static docs site.
+# Cloudflare Pages/Workers static assets should redirect duplicate host/scheme variants.
+http://pi-web.dev/* https://pi-web.dev/:splat 301
+http://www.pi-web.dev/* https://pi-web.dev/:splat 301
+https://www.pi-web.dev/* https://pi-web.dev/:splat 301
+/index.html / 301

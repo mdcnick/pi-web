@@ -1,4 +1,4 @@
-# PI WEB
+# PI WEB — web UI for Pi Coding Agent
 
 [![CI](https://github.com/jmfederico/pi-web/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jmfederico/pi-web/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/@jmfederico/pi-web)](https://www.npmjs.com/package/@jmfederico/pi-web)
@@ -10,9 +10,9 @@ Website: <https://pi-web.dev/>
 
 ![PI WEB](docs/assets/pi-web-banner.png)
 
-**Run AI coding agents on your own machine or server, keep them alive in real workspaces, and control everything from a browser.**
+**Run Pi Coding Agent from a web UI, keep sessions alive in real workspaces, and supervise them from any device.**
 
-PI WEB is a web control plane for [Pi Coding Agent](https://github.com/earendil-works/pi/tree/main/packages/coding-agent). Add your repositories once, open project workspaces and git worktrees, start agent sessions inside them, and come back later without losing the work. Your browser becomes the cockpit; your server becomes the persistent development environment. Start on your laptop, check in from your phone, and continue from an iPad or another machine whenever that is the device you have at hand.
+PI WEB is a web UI for [Pi Coding Agent](https://github.com/earendil-works/pi/tree/main/packages/coding-agent) that keeps agent sessions running on your own machine or server. Add your repositories once, open project workspaces and git worktrees, start sessions inside them, and come back later without losing the work. Your browser becomes the cockpit; your server becomes the persistent development environment. Start on your laptop, check in from your phone, and continue from an iPad or another machine whenever that is the device you have at hand.
 
 ![PI WEB demo](docs/assets/pi-web-demo.gif)
 
@@ -31,6 +31,10 @@ With PI WEB you can:
 Agentic development works best when agents are not trapped inside a single local terminal. They need stable environments, access to real repositories, and room to work across branches and tasks. Humans need the opposite: a clear place to supervise, redirect, review, and decide.
 
 PI WEB connects those two worlds. The work stays in the server-side environment while you move between devices: laptop for deep focus, phone for a quick check-in, tablet for review, desktop when you are back at a desk. It is not trying to recreate the old desktop IDE in a browser; it is a control surface for persistent, parallel, human-in-the-loop agent work.
+
+### Is PI WEB a Pi web UI?
+
+Yes. PI WEB is a Pi web UI for running and supervising Pi Coding Agent sessions from a browser. Unlike simple session viewers, PI WEB is built around persistent server-side workspaces, long-running session daemons, git worktrees, remote machines, and multi-device supervision.
 
 ## Core model
 
@@ -69,7 +73,7 @@ This maps naturally to real development work:
 
 ## Architecture
 
-PI WEB uses a split-process architecture so agent runtimes are not owned by the browser-facing dev server.
+PI WEB uses a split-process architecture so agent runtimes are not owned by the browser-facing dev server. Under the hood, it acts as a browser-based control plane for sessions, workspaces, files, terminals, and trusted remote machines.
 
 ```text
 Browser UI
