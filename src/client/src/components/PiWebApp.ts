@@ -1398,6 +1398,7 @@ export class PiWebApp extends LitElement {
       deleteWorkspace: (workspace) => this.deleteWorkspace(workspace),
       startSession: () => this.withChatScrollTransition(() => this.sessions.startSession()),
       archiveSession: () => this.sessions.archiveSession(),
+      reloadSession: () => this.sessions.reloadSession(),
       deleteCachedNewSession: () => this.sessions.deleteCachedNewSession(),
       stopActiveWork: () => this.sessions.stopActiveWork(),
     }, createContext);

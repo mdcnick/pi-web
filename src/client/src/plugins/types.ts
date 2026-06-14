@@ -106,6 +106,7 @@ export interface PluginRuntimeContext {
   deleteWorkspace: (workspace?: Workspace) => void | Promise<void>;
   startSession: () => void | Promise<void>;
   archiveSession: () => void | Promise<void>;
+  reloadSession: () => void | Promise<void>;
   deleteCachedNewSession: () => void | Promise<void>;
   stopActiveWork: () => void | Promise<void>;
 }
