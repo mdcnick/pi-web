@@ -13,7 +13,7 @@ import { machineSessionKey } from "../machineKeys";
 import { detectPromptCompletionTrigger, fileCompletionInsertText, type PromptCompletionTrigger } from "../promptCompletions";
 import { clearDraft, loadDraft, saveDraft } from "../promptDraftStorage";
 import { loadAttachmentDelivery, saveAttachmentDelivery } from "../attachmentPreferences";
-import { createMobilePromptEnterMedia, shouldSendPromptOnEnter } from "../promptEnterBehavior";
+import { createMobilePromptEnterMedia, readPromptEnterPreference, shouldSendPromptOnEnter } from "../promptEnterBehavior";
 import { promptEditorStyles, type CompletionItem } from "./shared";
 import { renderAttachIcon, renderSendIcon, renderQueueIcon, renderSteerIcon, renderStopIcon, renderThinkingGauge } from "./promptEditorIcons";
 import { thinkingGauge, thinkingLevelLabel } from "../../../shared/thinkingLevels";
@@ -343,7 +343,7 @@ export class PromptEditor extends LitElement {
       if (completion !== undefined) this.pick(completion);
       return true;
     }
-    if (!shouldSendPromptOnEnter(this.mobilePromptEnterMedia)) {
+    if (!shouldSendPromptOnEnter(this.mobilePromptEnterMedia, readPromptEnterPreference())) {
       return insertNewlineContinueMarkup(view) || insertNewlineAndIndent(view);
     }
     this.send(this.canSteer || this.isCompacting ? "followUp" : undefined);

@@ -2,4 +2,4 @@
 "@jmfederico/pi-web": patch
 ---
 
-Keep Enter/Return in the mobile chat composer for new lines, and send messages there only from the send button.
+Add a Keyboard shortcuts setting for choosing whether Enter sends chat messages or inserts new lines in this browser, while preserving the desktop-vs-mobile default (desktop Enter sends; mobile/coarse/narrow Enter inserts a new line).
