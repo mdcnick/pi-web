@@ -13,6 +13,7 @@ import { MachineStore } from "./machines/machineStore.js";
 import { WorkspaceService } from "./workspaces/workspaceService.js";
 import type { SessionProxyDaemon } from "./sessiond/sessionProxyRoutes.js";
 import { PI_WEB_CAPABILITIES } from "../shared/capabilities.js";
+import { WorkspaceAccessController } from "./workspaceAccessPolicy.js";
 import { machineScopedPluginId } from "../shared/machinePluginIds.js";
 import { MAX_IMAGE_PREVIEW_BYTES } from "../shared/workspaceFiles.js";
 import type { Project, Workspace } from "./types.js";
@@ -47,6 +48,7 @@ beforeEach(async () => {
         capabilities: [PI_WEB_CAPABILITIES.sessionsDeleteArchived],
       }),
     }),
+    workspaceAccess: new WorkspaceAccessController({ enabled: false }),
     sessionDaemon: fakeSessionDaemon(),
     piWebPlugins: {
       manifest: () => Promise.resolve({ plugins: [{ id: "fake", module: "/pi-web-plugins/fake/plugin.js?v=1", source: "test", scope: "local", machineSpecific: false }] }),
@@ -404,6 +406,39 @@ describe("buildApp", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({ error: "Invalid remote PI WEB plugin asset path" });
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("serves public Clerk settings when workspace auth blocks other API routes", async () => {
+    const policyPath = join(tempDir, "workspace-access.json");
+    await writeFile(policyPath, JSON.stringify({ admins: ["user_admin"], users: {} }));
+    const authApp = await buildApp({
+      projects: new ProjectService(new ProjectStore(join(tempDir, "auth-projects.json"))),
+      workspaces: new WorkspaceService(),
+      sessionDaemon: fakeSessionDaemon(),
+      workspaceAccess: new WorkspaceAccessController({
+        path: policyPath,
+        env: {
+          PI_WEB_WORKSPACE_AUTH: "true",
+          CLERK_ISSUER: "https://renewed-mastiff-20.clerk.accounts.dev",
+          PI_WEB_TRUST_AUTH_HEADERS: "true",
+        },
+      }),
+      clientDist: false,
+      logger: false,
+    });
+    try {
+      const publicResponse = await authApp.inject({ method: "GET", url: "/api/workspace-access/public" });
+      const blockedResponse = await authApp.inject({ method: "GET", url: "/api/projects" });
+      const authedResponse = await authApp.inject({ method: "GET", url: "/api/projects", headers: { "x-pi-web-user-id": "user_admin" } });
+
+      expect(publicResponse.statusCode).toBe(200);
+      expect(publicResponse.json()).toEqual({ enabled: true, publishableKey: "pk_test_cmVuZXdlZC1tYXN0aWZmLTIwLmNsZXJrLmFjY291bnRzLmRldiQ" });
+      expect(blockedResponse.statusCode).toBe(401);
+      expect(blockedResponse.json()).toEqual({ error: "Authentication required" });
+      expect(authedResponse.statusCode).toBe(200);
+    } finally {
+      await authApp.close();
+    }
   });
 
   it("returns stable errors for invalid project requests", async () => {

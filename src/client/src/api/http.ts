@@ -1,5 +1,8 @@
+import { workspaceAuthHeaders } from "../clerkAuth";
+
 export async function request<T>(url: string, parse: (value: unknown) => T, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
+  const headers = new Headers(await workspaceAuthHeaders());
+  new Headers(init?.headers).forEach((value, key) => { headers.set(key, value); });
   if (init?.body !== undefined) headers.set("content-type", "application/json");
   const response = await fetch(url, { ...init, headers });
   if (!response.ok) {

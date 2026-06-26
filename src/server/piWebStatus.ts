@@ -131,8 +131,8 @@ export async function getPiWebVersionStatus(daemon: PiWebStatusDaemon = new Sess
 export async function getPiWebStatus(daemon: PiWebStatusDaemon = new SessionDaemonClient()): Promise<PiWebStatusResponse> {
   const versionStatus = await getPiWebVersionStatus(daemon);
   const { web, sessiond } = versionStatus.components;
-  const release = await getLatestReleaseStatus(web.installedVersion ?? web.runtimeVersion ?? DEFAULT_VERSION);
   const components = { web, sessiond };
+  const release = await getLatestReleaseStatus(releaseCheckVersion(components));
   const commands = await commandsFor(components);
   const messages = buildMessages(components, release, commands);
   return {
@@ -332,9 +332,9 @@ function unavailableSessiond(error: string): PiWebComponentStatus {
   };
 }
 
-async function getLatestReleaseStatus(currentVersion: string): Promise<PiWebReleaseStatus> {
+async function getLatestReleaseStatus(currentVersion: string | undefined): Promise<PiWebReleaseStatus> {
   const checkedAtMs = Date.now();
-  if (skipVersionCheck()) {
+  if (currentVersion === undefined || skipVersionCheck()) {
     return { packageName: PI_WEB_PACKAGE_NAME, updateAvailable: false, checkedAt: new Date(checkedAtMs).toISOString(), skipped: true };
   }
 
@@ -401,6 +401,12 @@ function preferredInstallation(components: PiWebStatusResponse["components"]): P
   const sessiond = components.sessiond.installation;
   if (web?.kind === "local" || sessiond?.kind === "local") return web?.kind === "local" ? web : sessiond;
   return web ?? sessiond;
+}
+
+function releaseCheckVersion(components: PiWebStatusResponse["components"]): string | undefined {
+  const installation = preferredInstallation(components);
+  if (installation?.kind === "local") return undefined;
+  return components.web.installedVersion ?? components.web.runtimeVersion ?? DEFAULT_VERSION;
 }
 
 async function piWebCliCommands(installation: PiWebInstallationInfo | undefined): Promise<NativeServiceCommands> {

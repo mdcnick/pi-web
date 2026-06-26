@@ -21,6 +21,7 @@ try {
   const envPath = expandHome(envPathInput);
   const adminUserId = await ask("Your Clerk user ID / admin user ID", "user_admin");
   const workspace = await ask("First allowed workspace path", process.cwd());
+  const publishableKey = await ask("Clerk publishable key (blank to derive from issuer)", "");
   const issuer = await ask("Clerk issuer URL (blank to skip for now)", "");
   const audience = await ask("Clerk audience (blank unless configured in Clerk)", "");
 
@@ -46,6 +47,7 @@ try {
     "export PI_WEB_WORKSPACE_AUTH=true",
     `export PI_WEB_WORKSPACE_ACCESS=${shellQuote(policyPath)}`,
   ];
+  if (publishableKey !== "") lines.push(`export CLERK_PUBLISHABLE_KEY=${shellQuote(publishableKey)}`);
   if (issuer !== "") lines.push(`export CLERK_ISSUER=${shellQuote(issuer)}`);
   if (audience !== "") lines.push(`export CLERK_AUDIENCE=${shellQuote(audience)}`);
   lines.push("# Only enable behind a trusted proxy that strips spoofed client headers:");

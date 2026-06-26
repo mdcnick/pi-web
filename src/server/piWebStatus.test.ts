@@ -80,6 +80,26 @@ describe("PI WEB status", () => {
     }
   });
 
+  it("skips npm release checks for local checkouts", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const daemon = daemonWithComponent({
+      component: "sessiond",
+      label: "Session daemon",
+      runtimeVersion: "1.202605.8",
+      installedVersion: "1.202605.8",
+      stale: false,
+      available: true,
+      installation: { kind: "local", path: "/srv/dev/pi-web" },
+    });
+
+    const status = await getPiWebStatus(daemon);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(status.release.skipped).toBe(true);
+    expect(status.release.updateAvailable).toBe(false);
+    expect(status.messages.map((message) => message.id)).not.toContain("update-available");
+  });
+
   it("omits local restart commands when no native service command is known", async () => {
     process.env["PI_WEB_SKIP_VERSION_CHECK"] = "1";
     const home = await tempHome();

@@ -1,9 +1,15 @@
 import { webcrypto } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import type { FastifyRequest } from "fastify";
 import { cwdPathsEqual, normalizeRequestCwd } from "./workingDirectory.js";
+
+declare module "fastify" {
+  interface FastifyRequest {
+    piWebUserId?: string;
+  }
+}
 
 export interface WorkspaceAccessUser {
   id: string;
@@ -31,27 +37,58 @@ export interface WorkspaceAccessOptions {
 }
 
 export class WorkspaceAccessController {
-  private readonly policy: WorkspaceAccessPolicy | undefined;
+  private policy: WorkspaceAccessPolicy | undefined;
   private readonly enabled: boolean;
+  private readonly path: string;
   private readonly auth: ClerkJwtVerifier | undefined;
   private readonly trustAuthHeaders: boolean;
+  private readonly publishableKey: string | undefined;
 
   constructor(options: WorkspaceAccessOptions = {}) {
     const env = options.env ?? process.env;
     const configuredPath = options.path ?? env["PI_WEB_WORKSPACE_ACCESS"];
+    this.path = configuredPath ?? "~/.pi-web/workspace-access.json";
     this.enabled = options.enabled ?? isEnabled(env["PI_WEB_WORKSPACE_AUTH"] ?? env["PI_WEB_WORKSPACE_ACCESS_ENABLED"] ?? (configuredPath === undefined ? undefined : "true"));
-    this.policy = this.enabled ? loadWorkspaceAccessPolicy(configuredPath ?? "~/.pi-web/workspace-access.json") : undefined;
+    this.policy = this.enabled ? loadWorkspaceAccessPolicy(this.path) : undefined;
     this.auth = this.enabled ? ClerkJwtVerifier.fromEnv(env) : undefined;
     this.trustAuthHeaders = isEnabled(env["PI_WEB_TRUST_AUTH_HEADERS"]);
+    this.publishableKey = nonEmpty(env["CLERK_PUBLISHABLE_KEY"] ?? env["PI_WEB_CLERK_PUBLISHABLE_KEY"] ?? env["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"]) ?? publishableKeyFromIssuer(env["CLERK_ISSUER"] ?? env["PI_WEB_CLERK_ISSUER"]);
   }
 
   isEnabled(): boolean {
     return this.enabled;
   }
 
+  policyPath(): string {
+    return expandHome(this.path);
+  }
+
+  clerkPublishableKey(): string | undefined {
+    return this.publishableKey;
+  }
+
+  policyExists(): boolean {
+    return existsSync(this.policyPath());
+  }
+
+  currentPolicy(): WorkspaceAccessPolicy {
+    if (this.policy !== undefined) return clonePolicy(this.policy);
+    if (this.policyExists()) return loadWorkspaceAccessPolicy(this.path);
+    return emptyWorkspaceAccessPolicy();
+  }
+
+  savePolicy(policy: WorkspaceAccessPolicy): WorkspaceAccessPolicy {
+    const normalized = normalizeWorkspaceAccessPolicy(policy);
+    const filePath = this.policyPath();
+    mkdirSync(dirname(filePath), { recursive: true });
+    writeFileSync(filePath, `${JSON.stringify(normalized, null, 2)}\n`, { mode: 0o600 });
+    this.policy = normalized;
+    return clonePolicy(normalized);
+  }
+
   async authenticateRequest(request: FastifyRequest): Promise<void> {
     if (!this.enabled) return;
-    const token = bearerToken(request) ?? clerkSessionCookie(request);
+    const token = bearerToken(request) ?? accessTokenQuery(request) ?? clerkSessionCookie(request);
     if (token !== undefined && this.auth !== undefined) {
       setRequestUserId(request, await this.auth.verify(token));
     }
@@ -65,7 +102,7 @@ export class WorkspaceAccessController {
     const user = policy.users[userId];
     const isAdmin = policy.admins.includes(userId);
     if (user === undefined && !isAdmin) throw new WorkspaceAccessError(403, "User is not allowed in PI WEB");
-    return { userId, isAdmin, user };
+    return { userId, isAdmin, ...(user === undefined ? {} : { user }) };
   }
 
   requireAdmin(request: FastifyRequest): WorkspaceAccessContext {
@@ -88,6 +125,11 @@ export class WorkspaceAccessController {
     const normalized = normalizeRequestCwd(cwd);
     return context.user?.workspaces.some((workspace) => cwdPathsEqual(workspace, normalized)) ?? false;
   }
+
+  private requirePolicy(): WorkspaceAccessPolicy {
+    if (this.policy === undefined) throw new WorkspaceAccessError(500, "Workspace access policy is not loaded");
+    return this.policy;
+  }
 }
 
 export class WorkspaceAccessError extends Error {
@@ -97,29 +139,50 @@ export class WorkspaceAccessError extends Error {
 }
 
 export function workspaceAccessErrorStatus(error: unknown): number {
-  return error instanceof WorkspaceAccessError ? error.statusCode : 400;
+  if (error instanceof WorkspaceAccessError) return error.statusCode;
+  if (error instanceof Error && error.message.endsWith("not found")) return 404;
+  return 400;
 }
 
 export function loadWorkspaceAccessPolicy(path: string): WorkspaceAccessPolicy {
   const filePath = expandHome(path);
   if (!existsSync(filePath)) throw new Error(`Workspace access policy does not exist: ${filePath}`);
   const parsed: unknown = JSON.parse(readFileSync(filePath, "utf8"));
-  if (!isRecord(parsed)) throw new Error(`Workspace access policy must be a JSON object: ${filePath}`);
-  const admins = optionalStringArray(parsed["admins"], "admins");
-  const usersRecord = parsed["users"];
+  return normalizeWorkspaceAccessPolicy(parsed, filePath);
+}
+
+export function emptyWorkspaceAccessPolicy(): WorkspaceAccessPolicy {
+  return { admins: [], users: {} };
+}
+
+export function normalizeWorkspaceAccessPolicy(value: unknown, filePath = "workspace access policy"): WorkspaceAccessPolicy {
+  if (!isRecord(value)) throw new Error(`Workspace access policy must be a JSON object: ${filePath}`);
+  const admins = optionalStringArray(value["admins"], "admins");
+  const usersRecord = value["users"];
   if (!isRecord(usersRecord)) throw new Error(`Workspace access policy users must be an object: ${filePath}`);
   const users: Record<string, WorkspaceAccessUser> = {};
-  for (const [userId, value] of Object.entries(usersRecord)) {
-    if (!isRecord(value)) throw new Error(`Workspace access user must be an object: ${userId}`);
+  for (const [userId, userValue] of Object.entries(usersRecord)) {
+    if (!isRecord(userValue)) throw new Error(`Workspace access user must be an object: ${userId}`);
     users[userId] = {
       id: userId,
-      ...(typeof value["label"] === "string" ? { label: value["label"] } : {}),
-      ...(typeof value["email"] === "string" ? { email: value["email"] } : {}),
-      workspaces: stringArray(value["workspaces"], `users.${userId}.workspaces`).map((workspace) => normalizeRequestCwd(workspace)),
-      telegramUserIds: optionalNumberArray(value["telegramUserIds"], `users.${userId}.telegramUserIds`),
+      ...(typeof userValue["label"] === "string" ? { label: userValue["label"] } : {}),
+      ...(typeof userValue["email"] === "string" ? { email: userValue["email"] } : {}),
+      workspaces: stringArray(userValue["workspaces"], `users.${userId}.workspaces`).map((workspace) => normalizeRequestCwd(workspace)),
+      telegramUserIds: optionalNumberArray(userValue["telegramUserIds"], `users.${userId}.telegramUserIds`),
     };
   }
   return { admins, users };
+}
+
+function clonePolicy(policy: WorkspaceAccessPolicy): WorkspaceAccessPolicy {
+  return {
+    admins: [...policy.admins],
+    users: Object.fromEntries(Object.entries(policy.users).map(([userId, user]) => [userId, {
+      ...user,
+      workspaces: [...user.workspaces],
+      telegramUserIds: [...user.telegramUserIds],
+    }])),
+  };
 }
 
 function isEnabled(value: string | undefined): boolean {
@@ -139,7 +202,7 @@ function expandHome(path: string): string {
 
 function stringArray(value: unknown, name: string): string[] {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || item === "")) throw new Error(`${name} must be an array of non-empty strings`);
-  return value;
+  return value.filter((item): item is string => typeof item === "string");
 }
 
 function optionalStringArray(value: unknown, name: string): string[] {
@@ -150,7 +213,7 @@ function optionalStringArray(value: unknown, name: string): string[] {
 function optionalNumberArray(value: unknown, name: string): number[] {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.some((item) => typeof item !== "number" || !Number.isInteger(item))) throw new Error(`${name} must be an array of integer IDs`);
-  return value;
+  return value.filter((item): item is number => typeof item === "number");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -170,8 +233,12 @@ interface ClerkJwtPayload {
   nbf?: number;
 }
 
+interface ClerkJsonWebKey extends JsonWebKey {
+  kid?: string;
+}
+
 interface JsonWebKeySet {
-  keys?: JsonWebKey[];
+  keys?: ClerkJsonWebKey[];
 }
 
 class ClerkJwtVerifier {
@@ -192,10 +259,10 @@ class ClerkJwtVerifier {
   }
 
   async verify(token: string): Promise<string> {
-    const parts = token.split(".");
-    if (parts.length !== 3) throw new WorkspaceAccessError(401, "Invalid Clerk token");
-    const header = parseJwtPart<ClerkJwtHeader>(parts[0] ?? "");
-    const payload = parseJwtPart<ClerkJwtPayload>(parts[1] ?? "");
+    const [headerPart, payloadPart, signaturePart] = token.split(".");
+    if (headerPart === undefined || payloadPart === undefined || signaturePart === undefined || token.split(".").length !== 3) throw new WorkspaceAccessError(401, "Invalid Clerk token");
+    const header = parseJwtHeader(headerPart);
+    const payload = parseJwtPayload(payloadPart);
     if (header.alg !== "RS256") throw new WorkspaceAccessError(401, "Unsupported Clerk token algorithm");
     if (header.kid === undefined || header.kid === "") throw new WorkspaceAccessError(401, "Clerk token is missing kid");
     validateJwtPayload(payload, this.issuer, this.audience);
@@ -203,15 +270,15 @@ class ClerkJwtVerifier {
     const ok = await webcrypto.subtle.verify(
       "RSASSA-PKCS1-v1_5",
       key,
-      base64UrlBytes(parts[2] ?? ""),
-      new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
+      base64UrlBytes(signaturePart),
+      new TextEncoder().encode(`${headerPart}.${payloadPart}`),
     );
     if (!ok) throw new WorkspaceAccessError(401, "Invalid Clerk token signature");
     if (payload.sub === undefined || payload.sub === "") throw new WorkspaceAccessError(401, "Clerk token is missing subject");
     return payload.sub;
   }
 
-  private async keyFor(kid: string): Promise<CryptoKey> {
+  private async keyFor(kid: string) {
     const jwks = await this.loadJwks();
     const jwk = jwks.keys?.find((candidate) => candidate.kid === kid);
     if (jwk === undefined) throw new WorkspaceAccessError(401, "Clerk signing key not found");
@@ -222,7 +289,7 @@ class ClerkJwtVerifier {
     if (this.jwks !== undefined && Date.now() - this.jwksLoadedAt < 10 * 60 * 1000) return this.jwks;
     const response = await fetch(this.jwksUrl);
     if (!response.ok) throw new WorkspaceAccessError(401, `Failed to load Clerk JWKS: HTTP ${String(response.status)}`);
-    const jwks = await response.json() as JsonWebKeySet;
+    const jwks = parseJsonWebKeySet(await response.json());
     if (!Array.isArray(jwks.keys)) throw new WorkspaceAccessError(401, "Invalid Clerk JWKS");
     this.jwks = jwks;
     this.jwksLoadedAt = Date.now();
@@ -247,6 +314,13 @@ function bearerToken(request: FastifyRequest): string | undefined {
   return match?.[1];
 }
 
+function accessTokenQuery(request: FastifyRequest): string | undefined {
+  const query = request.query;
+  if (!isRecord(query)) return undefined;
+  const token = query["access_token"];
+  return typeof token === "string" && token !== "" ? token : undefined;
+}
+
 function clerkSessionCookie(request: FastifyRequest): string | undefined {
   const cookie = headerValue(request.headers.cookie);
   if (cookie === undefined) return undefined;
@@ -257,12 +331,60 @@ function clerkSessionCookie(request: FastifyRequest): string | undefined {
   return undefined;
 }
 
-function parseJwtPart<T>(part: string): T {
+function parseJwtHeader(part: string): ClerkJwtHeader {
+  const value = parseJwtJson(part);
+  if (!isRecord(value)) throw new WorkspaceAccessError(401, "Invalid Clerk token header");
+  const alg = typeof value["alg"] === "string" ? value["alg"] : undefined;
+  const kid = typeof value["kid"] === "string" ? value["kid"] : undefined;
+  return { ...(alg === undefined ? {} : { alg }), ...(kid === undefined ? {} : { kid }) };
+}
+
+function parseJwtPayload(part: string): ClerkJwtPayload {
+  const value = parseJwtJson(part);
+  if (!isRecord(value)) throw new WorkspaceAccessError(401, "Invalid Clerk token payload");
+  const sub = typeof value["sub"] === "string" ? value["sub"] : undefined;
+  const iss = typeof value["iss"] === "string" ? value["iss"] : undefined;
+  const exp = typeof value["exp"] === "number" ? value["exp"] : undefined;
+  const nbf = typeof value["nbf"] === "number" ? value["nbf"] : undefined;
+  const aud = jwtAudience(value["aud"]);
+  return { ...(sub === undefined ? {} : { sub }), ...(iss === undefined ? {} : { iss }), ...(aud === undefined ? {} : { aud }), ...(exp === undefined ? {} : { exp }), ...(nbf === undefined ? {} : { nbf }) };
+}
+
+function parseJwtJson(part: string): unknown {
   try {
-    return JSON.parse(new TextDecoder().decode(base64UrlBytes(part))) as T;
+    return JSON.parse(new TextDecoder().decode(base64UrlBytes(part)));
   } catch {
     throw new WorkspaceAccessError(401, "Invalid Clerk token encoding");
   }
+}
+
+function publishableKeyFromIssuer(issuer: string | undefined): string | undefined {
+  const cleanIssuer = nonEmpty(issuer);
+  if (cleanIssuer === undefined) return undefined;
+  try {
+    const frontendApi = new URL(cleanIssuer).host;
+    const prefix = /^(([a-z]+)-){2}([0-9]{1,2})\.clerk\.accounts([a-z.]*)(dev|com)$/iu.test(frontendApi) ? "pk_test_" : "pk_live_";
+    return `${prefix}${Buffer.from(`${frontendApi}$`, "utf8").toString("base64").replace(/=+$/u, "")}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function jwtAudience(value: unknown): string | string[] | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === "string") return value;
+  if (Array.isArray(value) && value.every((item) => typeof item === "string")) return value.filter((item): item is string => typeof item === "string");
+  throw new WorkspaceAccessError(401, "Invalid Clerk token audience");
+}
+
+function parseJsonWebKeySet(value: unknown): JsonWebKeySet {
+  if (!isRecord(value) || !Array.isArray(value["keys"])) throw new WorkspaceAccessError(401, "Invalid Clerk JWKS");
+  if (!value["keys"].every(isClerkJsonWebKey)) throw new WorkspaceAccessError(401, "Invalid Clerk JWKS");
+  return { keys: value["keys"].filter(isClerkJsonWebKey) };
+}
+
+function isClerkJsonWebKey(value: unknown): value is ClerkJsonWebKey {
+  return isRecord(value);
 }
 
 function base64UrlBytes(value: string): Uint8Array {
@@ -272,11 +394,11 @@ function base64UrlBytes(value: string): Uint8Array {
 }
 
 function getRequestUserId(request: FastifyRequest): string | undefined {
-  return (request as FastifyRequest & { piWebUserId?: string }).piWebUserId;
+  return request.piWebUserId;
 }
 
 function setRequestUserId(request: FastifyRequest, userId: string): void {
-  (request as FastifyRequest & { piWebUserId?: string }).piWebUserId = userId;
+  request.piWebUserId = userId;
 }
 
 function nonEmpty(value: string | undefined): string | undefined {

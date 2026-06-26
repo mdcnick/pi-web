@@ -2,7 +2,7 @@ import type { PiWebPlugin } from "@jmfederico/pi-web/plugin-api";
 
 const CONFIG_PATH = "~/.pi-web/telegram-gateway/config.json";
 const PLUGIN_PATH = "~/.pi-web/plugins/telegram-gateway";
-const RUN_COMMAND = `TELEGRAM_BOT_TOKEN=\"paste-token-here\" node ${PLUGIN_PATH}/gateway.mjs --config ${CONFIG_PATH}`;
+const RUN_COMMAND = `TELEGRAM_BOT_TOKEN="paste-token-here" node ${PLUGIN_PATH}/gateway.mjs --config ${CONFIG_PATH}`;
 
 const plugin: PiWebPlugin = {
   apiVersion: 1,
@@ -16,7 +16,7 @@ const plugin: PiWebPlugin = {
           description: "Show setup and launch commands for the Telegram-to-PI-WEB gateway.",
           group: "Integrations",
           enabled: (context) => context.state.selectedWorkspace !== undefined,
-          run: (context) => context.selectWorkspaceTool("telegram-gateway:workspace.telegram"),
+          run: (context) => { context.selectWorkspaceTool("telegram-gateway:workspace.telegram"); },
         },
         {
           id: "gateway.terminal",

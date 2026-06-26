@@ -25,6 +25,8 @@ import { registerMachineRoutes } from "./machines/machineRoutes.js";
 import { registerMachineProxyRoutes } from "./machines/machineProxyRoutes.js";
 import { proxyMachinePluginAsset, registerMachinePluginProxyRoutes } from "./machines/machinePluginProxyRoutes.js";
 import { WorkspaceAccessController, workspaceAccessErrorStatus } from "./workspaceAccessPolicy.js";
+import { registerWorkspaceAccessRoutes } from "./workspaceAccessRoutes.js";
+import { registerJarvisRoutes } from "./jarvisRoutes.js";
 import type { Project } from "./types.js";
 
 export interface AppDependencies {
@@ -152,6 +154,8 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
   app.get("/api/pi-web/version", async () => getPiWebVersionStatus(sessionDaemon));
   app.get("/api/pi-web/runtime", async () => getPiWebRuntime(sessionDaemon));
   app.get("/api/plugins", async () => piWebPlugins.plugins());
+  registerWorkspaceAccessRoutes(app, workspaceAccess);
+  registerJarvisRoutes(app, { projects, workspaces, sessionDaemon, workspaceAccess });
   registerConfigRoutes(app, deps.config);
 
   registerMachineRoutes(app, machines);

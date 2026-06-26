@@ -63,6 +63,12 @@ Set this in `~/.pi-web/telegram-gateway/config.json`:
 
 When this is set, Telegram access can be granted by adding a Telegram numeric user ID to the matching Clerk user record.
 
+## Internal dashboard
+
+Open a workspace, choose the **Access** panel, and use the Workspace Auth Dashboard to create/update the shared policy file, add Clerk users, mark admins, add allowed workspace paths, and link Telegram numeric user IDs. The dashboard writes the same policy JSON used by the PI WEB server and Telegram Gateway.
+
+The dashboard calls the admin-only `/api/workspace-access` endpoint. When workspace auth is disabled, local PI WEB acts as the admin so you can bootstrap the first policy. When auth is enabled, only users listed in `admins` can edit it.
+
 ## Server-side enforcement
 
 PI WEB now has a Clerk-ready workspace access controller. Enable the policy layer with:
@@ -72,7 +78,9 @@ export PI_WEB_WORKSPACE_AUTH=true
 export PI_WEB_WORKSPACE_ACCESS=~/.pi-web/workspace-access.json
 ```
 
-The enforcement adapter can verify Clerk session JWTs directly using Node built-ins. Configure either:
+The browser login UI uses `CLERK_PUBLISHABLE_KEY` when set. If it is omitted, PI WEB derives the publishable key from `CLERK_ISSUER` / `PI_WEB_CLERK_ISSUER` for standard Clerk domains.
+
+The enforcement adapter verifies Clerk session JWTs directly using Node built-ins. Configure either:
 
 ```bash
 export CLERK_ISSUER=https://your-app.clerk.accounts.dev
@@ -90,7 +98,7 @@ Optional audience check:
 export CLERK_AUDIENCE=your-audience
 ```
 
-PI WEB accepts a Clerk JWT from `Authorization: Bearer <token>` or the Clerk `__session` cookie and resolves the user from the token `sub` claim.
+PI WEB accepts Clerk JWTs from `Authorization: Bearer <token>`, the Clerk `__session` cookie, or the `access_token` websocket query parameter and resolves the user from the token `sub` claim.
 
 For trusted reverse-proxy deployments only, you can also enable user headers:
 
@@ -102,11 +110,8 @@ Then PI WEB accepts `X-PI-WEB-USER-ID` or `X-Clerk-User-ID`. Do not enable this 
 
 Protected surfaces include project/workspace filtering, workspace files, file suggestions, git routes, terminal routes, session prompts/events when `cwd` is supplied, and admin-only project/workspace mutation routes.
 
-## Clerk integration plan
+## Clerk browser integration
 
-The remaining Clerk phase should:
+When workspace auth is enabled, PI WEB serves `/api/workspace-access/public` before requiring authentication. The client loads Clerk, renders the Clerk sign-in card when there is no session, then forwards the active session token on HTTP requests and websocket upgrades.
 
-1. Add a first-class Clerk login UI to the PI WEB client.
-2. Pass Clerk session tokens/cookies to the PI WEB API consistently for browser HTTP and websocket calls.
-3. Keep using this same `~/.pi-web/workspace-access.json` policy.
-4. Add an admin UI for editing the policy safely.
+Keep using the same `~/.pi-web/workspace-access.json` policy. Admins can edit it from the **Access** workspace panel after signing in.

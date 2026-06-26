@@ -1,0 +1,10 @@
+{
+  "name": "@jmfederico/pi-web-plugin-jarvis",
+  "private": true,
+  "type": "module",
+  "piWeb": {
+    "plugins": [
+      { "id": "jarvis", "module": "pi-web-plugin.js" }
+    ]
+  }
+}
