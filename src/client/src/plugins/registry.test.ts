@@ -196,7 +196,9 @@ describe("PluginRegistry", () => {
     expect(reloadable.find((action) => action.id === "core:session.reload")?.enabled).toBe(true);
 
     const noCapability = registry.getActions(createContext({ selectedSession: testSession() }).context);
-    expect(noCapability.find((action) => action.id === "core:session.reload")?.enabled).toBe(false);
+    const noCapabilityReload = noCapability.find((action) => action.id === "core:session.reload");
+    expect(noCapabilityReload?.enabled).toBe(false);
+    expect(noCapabilityReload?.disabledReason).toBe("Update and restart Pi-Web on this machine to reload sessions.");
 
     const archived = registry.getActions(createContext({ selectedSession: { ...testSession(), archived: true, archivedAt: "2026-05-20T00:00:00.000Z" }, machineRuntimes: reloadRuntime }).context);
     expect(archived.find((action) => action.id === "core:session.reload")?.enabled).toBe(false);

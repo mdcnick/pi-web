@@ -13,7 +13,7 @@ import {
   type CreateAgentSessionRuntimeFactory,
   type EditToolDetails,
 } from "@earendil-works/pi-coding-agent";
-import type { ClientArchiveSessionsResponse, ClientCommand, ClientCommandResult, ClientMessagePage, ClientSession, ClientSessionModel, ClientSessionRef, ClientSessionStatus, ClientThinkingLevel, SessionUiEvent } from "../types.js";
+import type { ClientArchiveSessionsResponse, ClientCommand, ClientCommandResult, ClientMessagePage, ClientSession, ClientSessionCleanupExecuteResponse, ClientSessionCleanupPreviewResponse, ClientSessionModel, ClientSessionRef, ClientSessionStatus, ClientThinkingLevel, SessionUiEvent } from "../types.js";
 import { pageMessagesAtSafeBoundary } from "./messagePaging.js";
 import type { SessionEventHub } from "../realtime/sessionEventHub.js";
 import { BUILTIN_COMMANDS } from "./builtinCommands.js";
@@ -34,6 +34,7 @@ import type { WorkspaceActivityService } from "../activity/workspaceActivityServ
 import { createSpawnSessionToolDefinition, type SpawnSessionInvocation, type SpawnSessionResult } from "./spawnSessionTool.js";
 import { createSubsessionToolDefinitions, type SpawnSubsessionInvocation, type SpawnSubsessionResult, type SubsessionCheckResult, type SubsessionReadQuery, type SubsessionReadResult, type SubsessionStatus, type SubsessionSummary, type SubsessionToolDeps } from "./spawnSubsessionTool.js";
 import { buildTranscriptView } from "./subsessionTranscript.js";
+import { planSessionCleanup, summarizeSessionCleanupExecution, type NormalizedSessionCleanupRequest, type SessionCleanupPlan } from "./sessionCleanup.js";
 import type { SpawnTargetDecision, SpawnTargetResolver } from "./spawnTargetResolver.js";
 
 /**
@@ -298,6 +299,8 @@ export interface PiSessionServiceDependencies {
   subsessionsEnabled?: boolean;
   /** Structured logger for notable runtime events (e.g. spawns). */
   logger?: PiSessionLogger;
+  /** Clock seam for cleanup planning tests. */
+  now?: () => Date;
 }
 
 export class PiSessionService {
@@ -331,6 +334,7 @@ export class PiSessionService {
   private readonly workspaceActivity: Pick<WorkspaceActivityService, "applySessionStatus" | "applySessionActivity" | "removeSession" | "reconcileSessionActivity"> | undefined;
   private readonly spawnTargets: SpawnTargetResolver | undefined;
   private readonly logger: PiSessionLogger;
+  private readonly now: () => Date;
 
   constructor(private readonly events: SessionEventHub, deps: PiSessionServiceDependencies = {}) {
     this.archiveStore = deps.archiveStore ?? new SessionArchiveStore();
@@ -339,6 +343,7 @@ export class PiSessionService {
     this.modelRegistry = deps.modelRegistry ?? ModelRegistry.create(AuthStorage.create());
     this.spawnTargets = deps.spawnTargets;
     this.logger = deps.logger ?? noopLogger;
+    this.now = deps.now ?? (() => new Date());
     // Subsessions are a beta capability gated behind their own flag, and they
     // also require the spawn capability (they share its project-scope resolver).
     const subsessionsActive = this.spawnTargets !== undefined && deps.subsessionsEnabled === true;
@@ -376,6 +381,48 @@ export class PiSessionService {
 
   activeCount(): number {
     return this.active.size;
+  }
+
+  async cleanupPreview(request: NormalizedSessionCleanupRequest): Promise<ClientSessionCleanupPreviewResponse> {
+    return previewResponseFromPlan(await this.cleanupPlan(request));
+  }
+
+  async cleanup(request: NormalizedSessionCleanupRequest): Promise<ClientSessionCleanupExecuteResponse> {
+    const plan = await this.cleanupPlan(request);
+    if (plan.deleteRecords.length > 0 && this.archiveStore.deleteArchived === undefined) throw new Error("Archive store does not support deletion");
+
+    const archiveInputs: ArchiveSessionInput[] = [];
+    const deleteRecords: ArchivedSessionRecord[] = [];
+    const skippedBusySessionIds = new Set(plan.skippedBusySessionIds);
+
+    for (const input of plan.archiveInputs) {
+      if (this.activeSessionHasWork(input.sessionId)) {
+        skippedBusySessionIds.add(input.sessionId);
+        continue;
+      }
+      await this.closeActive(input.sessionId);
+      await this.archiveStore.archive(input);
+      archiveInputs.push(input);
+    }
+
+    for (const record of plan.deleteRecords) {
+      if (this.activeSessionHasWork(record.sessionId)) {
+        skippedBusySessionIds.add(record.sessionId);
+        continue;
+      }
+      await this.closeActive(record.sessionId);
+      if (record.archivePath === undefined) await this.ensureArchivedRecordMoved(record);
+      await this.archiveStore.deleteArchived?.(record.sessionId);
+      deleteRecords.push(record);
+    }
+
+    return summarizeSessionCleanupExecution({
+      archiveInputs,
+      deleteRecords,
+      thresholds: plan.thresholds,
+      generatedAt: plan.generatedAt,
+      skippedBusySessionIds: [...skippedBusySessionIds],
+    });
   }
 
   async dispose(): Promise<void> {
@@ -1093,6 +1140,30 @@ export class PiSessionService {
     });
   }
 
+  private async cleanupPlan(request: NormalizedSessionCleanupRequest) {
+    const [sessions, archivedRecords] = await Promise.all([this.sessionManager.listAll?.() ?? [], this.archiveStore.list()]);
+    return planSessionCleanup({
+      sessions,
+      archivedRecords,
+      activeSessions: this.cleanupActiveSessionStatuses(),
+      thresholds: request.thresholds,
+      ...(request.projectCwds === undefined ? {} : { projectCwds: request.projectCwds }),
+      now: this.now(),
+    });
+  }
+
+  private cleanupActiveSessionStatuses(): { sessionId: string; hasActiveWork: boolean }[] {
+    return [...new Set(this.active.values())].map((active) => ({
+      sessionId: active.runtime.session.sessionId,
+      hasActiveWork: this.hasActiveWork(active.runtime.session),
+    }));
+  }
+
+  private activeSessionHasWork(sessionId: string): boolean {
+    const active = this.active.get(sessionId);
+    return active !== undefined && this.hasActiveWork(active.runtime.session);
+  }
+
   private reconcilableSessionIds(cwd: string, listedSessionIds: string[], archivedById: Map<string, ArchivedSessionRecord>): string[] {
     const sessionIds = new Set(listedSessionIds);
     for (const active of new Set(this.active.values())) {
@@ -1521,6 +1592,16 @@ export class PiSessionService {
   private hasQueuedMessageText(session: PiAgentSession, text: string): boolean {
     return queuedMessagesFromSession(session, this.compactionQueuedMessages(session.sessionId)).some((message) => message.text === text);
   }
+}
+
+function previewResponseFromPlan(plan: SessionCleanupPlan): ClientSessionCleanupPreviewResponse {
+  return {
+    generatedAt: plan.generatedAt,
+    thresholds: plan.thresholds,
+    projects: plan.projects,
+    totals: plan.totals,
+    ...(plan.skippedBusySessionIds.length === 0 ? {} : { skippedBusySessionIds: plan.skippedBusySessionIds }),
+  };
 }
 
 function modelToClientModel(model: PiAgentSession["model"]): ClientSessionModel {

@@ -1,4 +1,4 @@
-import type { ArchiveSessionsResponse, AuthProviderOption, AuthProviderStatus, AuthProvidersResponse, AuthStatusSource, AuthType, CommandOption, CommandResult, DeleteWorkspaceFileResponse, FileContentResponse, FileSuggestion, FileTreeEntry, FileTreeResponse, GitDiffResponse, GitFileState, GitStatusFile, GitStatusResponse, Machine, MachineHealth, MachineKind, MachineRuntime, MachineStatus, MessagePage, ModelSelectionResponse, MoveWorkspaceFileResponse, OAuthFlowState, PiWebCapability, PiWebComponentStatus, PiWebConfigEnvOverrides, PiWebConfigResponse, PiWebConfigValues, PiWebInstallationInfo, PiWebPluginConfigMap, PiWebPluginInfo, PiWebPluginsResponse, PiWebPluginScope, PiWebReleaseStatus, PiWebRuntimeComponent, PiWebRuntimeResponse, PiWebServiceComponent, PiWebShortcutConfig, PiWebStatusMessage, PiWebStatusResponse, PiWebStatusSeverity, Project, QueuedSessionMessage, SavedPromptAttachment, SessionInfo, SessionModel, SessionStatus, SlashCommand, TerminalCommandRun, TerminalCommandRunStatus, TerminalInfo, ThinkingLevelsResponse, WriteWorkspaceFileResponse, Workspace, WorkspaceActivity, WorkspaceActivityResponse } from "../../../shared/apiTypes";
+import type { ArchiveSessionsResponse, AuthProviderOption, AuthProviderStatus, AuthProvidersResponse, AuthStatusSource, AuthType, CommandOption, CommandResult, DeleteWorkspaceFileResponse, FileContentResponse, FileSuggestion, FileTreeEntry, FileTreeResponse, GitDiffResponse, GitFileState, GitStatusFile, GitStatusResponse, Machine, MachineHealth, MachineKind, MachineRuntime, MachineStatus, MessagePage, ModelSelectionResponse, MoveWorkspaceFileResponse, OAuthFlowState, PiWebCapability, PiWebComponentStatus, PiWebConfigEnvOverrides, PiWebConfigResponse, PiWebConfigValues, PiWebInstallationInfo, PiWebPluginConfigMap, PiWebPluginInfo, PiWebPluginsResponse, PiWebPluginScope, PiWebReleaseStatus, PiWebRuntimeComponent, PiWebRuntimeResponse, PiWebServiceComponent, PiWebShortcutConfig, PiWebStatusMessage, PiWebStatusResponse, PiWebStatusSeverity, Project, QueuedSessionMessage, SavedPromptAttachment, SessionCleanupExecuteResponse, SessionCleanupPreviewResponse, SessionCleanupProjectSummary, SessionCleanupThresholds, SessionCleanupTotals, SessionInfo, SessionModel, SessionStatus, SlashCommand, TerminalCommandRun, TerminalCommandRunStatus, TerminalInfo, ThinkingLevelsResponse, WriteWorkspaceFileResponse, Workspace, WorkspaceActivity, WorkspaceActivityResponse } from "../../../shared/apiTypes";
 import { isPiWebCapability } from "../../../shared/capabilities";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -188,6 +188,52 @@ export function parseSessionStatus(value: unknown): SessionStatus {
     ...optionalModel(record["model"]),
     ...optionalContextUsage(record["contextUsage"]),
     ...optionalField("thinkingLevel", optionalString(record, "thinkingLevel")),
+  };
+}
+
+export function parseSessionCleanupPreviewResponse(value: unknown): SessionCleanupPreviewResponse {
+  const record = requireRecord(value);
+  const skippedBusySessionIds = record["skippedBusySessionIds"] === undefined ? undefined : arrayOfString(record["skippedBusySessionIds"], "skippedBusySessionIds");
+  return {
+    generatedAt: requireString(record, "generatedAt"),
+    thresholds: parseSessionCleanupThresholds(record["thresholds"]),
+    projects: arrayOf(parseSessionCleanupProjectSummary)(record["projects"]),
+    totals: parseSessionCleanupTotals(record["totals"]),
+    ...(skippedBusySessionIds === undefined ? {} : { skippedBusySessionIds }),
+  };
+}
+
+export function parseSessionCleanupExecuteResponse(value: unknown): SessionCleanupExecuteResponse {
+  const record = requireRecord(value);
+  return {
+    ...parseSessionCleanupPreviewResponse(record),
+    archivedSessionIds: arrayOfString(record["archivedSessionIds"], "archivedSessionIds"),
+    deletedSessionIds: arrayOfString(record["deletedSessionIds"], "deletedSessionIds"),
+  };
+}
+
+function parseSessionCleanupThresholds(value: unknown): SessionCleanupThresholds {
+  const record = requireRecord(value);
+  return {
+    ...optionalField("archiveIdleDays", optionalNumber(record, "archiveIdleDays")),
+    ...optionalField("deleteArchivedDays", optionalNumber(record, "deleteArchivedDays")),
+  };
+}
+
+function parseSessionCleanupProjectSummary(value: unknown): SessionCleanupProjectSummary {
+  const record = requireRecord(value);
+  return {
+    cwd: requireString(record, "cwd"),
+    archiveCount: requireNumber(record, "archiveCount"),
+    deleteCount: requireNumber(record, "deleteCount"),
+  };
+}
+
+function parseSessionCleanupTotals(value: unknown): SessionCleanupTotals {
+  const record = requireRecord(value);
+  return {
+    archiveCount: requireNumber(record, "archiveCount"),
+    deleteCount: requireNumber(record, "deleteCount"),
   };
 }
 

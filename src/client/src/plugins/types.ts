@@ -128,6 +128,8 @@ export interface PluginAction {
   shortcut?: string;
   group?: string;
   enabled?: (context: PluginRuntimeContext) => boolean;
+  /** Explain why a disabled action is visible but unavailable. */
+  disabledReason?: (context: PluginRuntimeContext) => string | undefined;
   run: (context: PluginRuntimeContext) => void | Promise<void>;
 }
 

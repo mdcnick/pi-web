@@ -1,4 +1,4 @@
-import type { DeleteWorkspaceFileResponse, FileSuggestion, MoveWorkspaceFileOptions, PiWebConfigValues, PromptAttachment, RunTerminalCommandInput, SessionRef, TerminalCommandRun, TerminalCommandRunFilter, WriteWorkspaceFileOptions } from "../../../shared/apiTypes";
+import type { DeleteWorkspaceFileResponse, FileSuggestion, MoveWorkspaceFileOptions, PiWebConfigValues, PromptAttachment, RunTerminalCommandInput, SessionCleanupRequest, SessionRef, TerminalCommandRun, TerminalCommandRunFilter, WriteWorkspaceFileOptions } from "../../../shared/apiTypes";
 import { request } from "./http";
 import {
   arrayOf,
@@ -32,6 +32,8 @@ import {
   parseReloaded,
   parseRestored,
   parseSavedAttachments,
+  parseSessionCleanupExecuteResponse,
+  parseSessionCleanupPreviewResponse,
   parseSessionInfo,
   parseSessionStatus,
   parseSlashCommand,
@@ -152,6 +154,8 @@ export const workspacesApi = {
 export const sessionsApi = {
   sessions: (cwd: string, machineId = "local") => request(`${machinePrefix(machineId)}/sessions?cwd=${encodeURIComponent(cwd)}`, arrayOf(parseSessionInfo)),
   startSession: (cwd: string, machineId = "local") => request(`${machinePrefix(machineId)}/sessions`, parseSessionInfo, { method: "POST", body: JSON.stringify({ cwd }) }),
+  cleanupPreview: (input: SessionCleanupRequest, machineId = "local") => request(`${machinePrefix(machineId)}/sessions/cleanup/preview`, parseSessionCleanupPreviewResponse, { method: "POST", body: JSON.stringify(input) }),
+  cleanup: (input: SessionCleanupRequest, machineId = "local") => request(`${machinePrefix(machineId)}/sessions/cleanup`, parseSessionCleanupExecuteResponse, { method: "POST", body: JSON.stringify(input) }),
   messages: (session: SessionLookup, options?: { limit?: number; before?: number }, machineId = "local") => request(messageUrl(session, options, machineId), parseMessagePage),
   status: (session: SessionLookup, machineId = "local") => request(sessionQueryUrl(session, "status", machineId), parseSessionStatus),
   models: (session: SessionLookup, machineId = "local") => request(sessionQueryUrl(session, "models", machineId), parseModelSelectionResponse),

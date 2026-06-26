@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PI_WEB_CAPABILITIES } from "../../../shared/capabilities";
-import { parseCommandResult, parseFileContentResponse, parseFileSuggestion, parseGitStatusResponse, parseMessagePage, parsePiWebConfigResponse, parsePiWebPluginsResponse, parsePiWebRuntimeResponse, parseSessionStatus, parseSlashCommand, parseTerminalCommandRun, parseTerminalInfo, parseWorkspace, parseWorkspaceActivityResponse } from "./parsers";
+import { parseCommandResult, parseFileContentResponse, parseFileSuggestion, parseGitStatusResponse, parseMessagePage, parsePiWebConfigResponse, parsePiWebPluginsResponse, parsePiWebRuntimeResponse, parseSessionCleanupExecuteResponse, parseSessionCleanupPreviewResponse, parseSessionStatus, parseSlashCommand, parseTerminalCommandRun, parseTerminalInfo, parseWorkspace, parseWorkspaceActivityResponse } from "./parsers";
 
 describe("API parsers", () => {
   it("parses PI WEB config responses", () => {
@@ -42,6 +42,31 @@ describe("API parsers", () => {
   it("accepts legacy array message pages and paged message responses", () => {
     expect(parseMessagePage(["a", "b"])).toEqual({ messages: ["a", "b"], start: 0, total: 2 });
     expect(parseMessagePage({ messages: ["c"], start: 3, total: 9 })).toEqual({ messages: ["c"], start: 3, total: 9 });
+  });
+
+  it("parses session cleanup preview and execute responses", () => {
+    const preview = {
+      generatedAt: "2026-06-25T12:00:00.000Z",
+      thresholds: { archiveIdleDays: 14, deleteArchivedDays: 30 },
+      projects: [
+        { cwd: "/repo-a", archiveCount: 2, deleteCount: 1 },
+        { cwd: "/repo-b", archiveCount: 0, deleteCount: 3 },
+      ],
+      totals: { archiveCount: 2, deleteCount: 4 },
+      skippedBusySessionIds: ["busy-1"],
+    };
+
+    expect(parseSessionCleanupPreviewResponse(preview)).toEqual(preview);
+    expect(parseSessionCleanupExecuteResponse({ ...preview, archivedSessionIds: ["s1", "s2"], deletedSessionIds: ["a1"] })).toEqual({
+      ...preview,
+      archivedSessionIds: ["s1", "s2"],
+      deletedSessionIds: ["a1"],
+    });
+  });
+
+  it("rejects malformed session cleanup responses", () => {
+    expect(() => parseSessionCleanupPreviewResponse({ generatedAt: "now", thresholds: {}, projects: [{ cwd: "/repo", archiveCount: "2", deleteCount: 0 }], totals: { archiveCount: 2, deleteCount: 0 } })).toThrow("Expected number field: archiveCount");
+    expect(() => parseSessionCleanupExecuteResponse({ generatedAt: "now", thresholds: {}, projects: [], totals: { archiveCount: 0, deleteCount: 0 }, archivedSessionIds: ["s1"], deletedSessionIds: [1] })).toThrow("Expected string array field: deletedSessionIds");
   });
 
   it("validates session status including optional model and nullable context usage", () => {

@@ -61,6 +61,23 @@ describe("machine-scoped runtime API", () => {
 });
 
 describe("session API compatibility", () => {
+  it("posts session cleanup preview and execute requests through the selected machine", async () => {
+    const preview = { generatedAt: "2026-06-25T12:00:00.000Z", thresholds: { archiveIdleDays: 7 }, projects: [{ cwd: "/repo", archiveCount: 2, deleteCount: 0 }], totals: { archiveCount: 2, deleteCount: 0 } };
+    const executed = { ...preview, archivedSessionIds: ["s1", "s2"], deletedSessionIds: [] };
+    const fetchMock = stubSequenceFetch([jsonResponse(preview), jsonResponse(executed)]);
+
+    await expect(sessionsApi.cleanupPreview({ archiveIdleDays: 7, deleteArchivedDays: null }, "remote a")).resolves.toEqual(preview);
+    await expect(sessionsApi.cleanup({ archiveIdleDays: 7, projectCwds: ["/repo"] }, "remote a")).resolves.toEqual(executed);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchCall(fetchMock, 0)[0]).toBe("/api/machines/remote%20a/sessions/cleanup/preview");
+    expect(fetchCall(fetchMock, 0)[1]?.method).toBe("POST");
+    expect(JSON.parse(requestBody(fetchCall(fetchMock, 0)[1]))).toEqual({ archiveIdleDays: 7, deleteArchivedDays: null });
+    expect(fetchCall(fetchMock, 1)[0]).toBe("/api/machines/remote%20a/sessions/cleanup");
+    expect(fetchCall(fetchMock, 1)[1]?.method).toBe("POST");
+    expect(JSON.parse(requestBody(fetchCall(fetchMock, 1)[1]))).toEqual({ archiveIdleDays: 7, projectCwds: ["/repo"] });
+  });
+
   it("keeps legacy session-id calls free of cwd context", async () => {
     const fetchMock = stubJsonFetch({ accepted: true });
 

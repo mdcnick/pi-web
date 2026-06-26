@@ -446,6 +446,94 @@ describe("PiSessionService", () => {
     await service.dispose();
   });
 
+  it("previews session cleanup without mutating and executes a recomputed plan", async () => {
+    const archivedInputs: string[] = [];
+    const deletedSessionIds: string[] = [];
+    let listAllCalls = 0;
+    const archived = { sessionId: "archived-old", cwd: "/old-project", archivedAt: "2026-04-01T00:00:00.000Z", archivePath: "/archive/archived-old.jsonl" };
+    const otherArchived = { sessionId: "archived-other", cwd: "/other-project", archivedAt: "2026-04-01T00:00:00.000Z", archivePath: "/archive/archived-other.jsonl" };
+    const service = new PiSessionService(new CapturingSessionEventHub(), {
+      now: () => new Date("2026-06-25T00:00:00.000Z"),
+      archiveStore: {
+        list: () => Promise.resolve([archived, otherArchived]),
+        get: () => Promise.resolve(undefined),
+        archive: (input) => {
+          archivedInputs.push(input.sessionId);
+          return Promise.resolve({ sessionId: input.sessionId, cwd: input.cwd, archivedAt: "2026-06-25T00:00:00.000Z" });
+        },
+        restore: () => Promise.resolve(),
+        isArchived: () => Promise.resolve(false),
+        deleteArchived: (sessionId) => {
+          deletedSessionIds.push(sessionId);
+          return Promise.resolve();
+        },
+      },
+      sessionManager: {
+        create: () => fakeSessionManager(),
+        list: () => Promise.resolve([]),
+        listAll: () => {
+          listAllCalls += 1;
+          return Promise.resolve([
+            listAllCalls === 1 ? sessionRecord("preview-only", "/old-project") : sessionRecord("execute-only", "/old-project"),
+            listAllCalls === 1 ? sessionRecord("preview-other", "/other-project") : sessionRecord("execute-other", "/other-project"),
+          ]);
+        },
+        open: () => fakeSessionManager(),
+      },
+      heartbeatIntervalMs: 60_000,
+    });
+
+    const preview = await service.cleanupPreview({ thresholds: { archiveIdleDays: 30, deleteArchivedDays: 30 }, projectCwds: ["/old-project"] });
+    expect(preview.totals).toEqual({ archiveCount: 1, deleteCount: 1 });
+    expect(preview.projects).toEqual([{ cwd: "/old-project", archiveCount: 1, deleteCount: 1 }]);
+    expect(archivedInputs).toEqual([]);
+    expect(deletedSessionIds).toEqual([]);
+
+    const result = await service.cleanup({ thresholds: { archiveIdleDays: 30, deleteArchivedDays: 30 }, projectCwds: ["/old-project"] });
+    expect(result.archivedSessionIds).toEqual(["execute-only"]);
+    expect(result.deletedSessionIds).toEqual(["archived-old"]);
+    expect(archivedInputs).toEqual(["execute-only"]);
+    expect(deletedSessionIds).toEqual(["archived-old"]);
+
+    await service.dispose();
+  });
+
+  it("skips busy active sessions during cleanup execution", async () => {
+    const fake = fakeRuntime("busy-open", { isStreaming: true, sessionManager: fakeSessionManager("/old-project"), sessionFile: "/sessions/busy-open.jsonl" });
+    const archivedInputs: string[] = [];
+    const service = new PiSessionService(new CapturingSessionEventHub(), {
+      now: () => new Date("2026-06-25T00:00:00.000Z"),
+      createAgentRuntime: runtimeCreator(fake.runtime),
+      archiveStore: {
+        list: () => Promise.resolve([]),
+        get: () => Promise.resolve(undefined),
+        archive: (input) => {
+          archivedInputs.push(input.sessionId);
+          return Promise.resolve({ sessionId: input.sessionId, cwd: input.cwd, archivedAt: "2026-06-25T00:00:00.000Z" });
+        },
+        restore: () => Promise.resolve(),
+        isArchived: () => Promise.resolve(false),
+      },
+      sessionManager: {
+        create: () => fakeSessionManager("/old-project"),
+        list: () => Promise.resolve([sessionRecord("busy-open", "/old-project")]),
+        listAll: () => Promise.resolve([sessionRecord("busy-open", "/old-project")]),
+        open: () => fakeSessionManager("/old-project"),
+      },
+      heartbeatIntervalMs: 60_000,
+    });
+
+    await service.status("busy-open");
+    const result = await service.cleanup({ thresholds: { archiveIdleDays: 1 } });
+
+    expect(result.archivedSessionIds).toEqual([]);
+    expect(result.skippedBusySessionIds).toEqual(["busy-open"]);
+    expect(archivedInputs).toEqual([]);
+    expect(fake.calls.abort).toBe(0);
+
+    await service.dispose();
+  });
+
   it("reloads a session by closing the active runtime and re-opening it from disk", async () => {
     const first = fakeRuntime("reload-session");
     const second = fakeRuntime("reload-session");

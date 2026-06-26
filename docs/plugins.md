@@ -426,9 +426,12 @@ interface PluginAction {
   shortcut?: string;
   group?: string;
   enabled?: (context: PluginRuntimeContext) => boolean;
+  disabledReason?: (context: PluginRuntimeContext) => string | undefined;
   run: (context: PluginRuntimeContext) => void | Promise<void>;
 }
 ```
+
+If an action is disabled and returns `disabledReason`, PI WEB can keep it visible in the action palette with that explanation instead of hiding it.
 
 Stable runtime context fields:
 

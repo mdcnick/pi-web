@@ -3,6 +3,7 @@ export type MachineStatus = "unknown" | "online" | "offline" | "error";
 
 export const PI_WEB_CAPABILITIES = {
   sessionsDeleteArchived: "sessions.deleteArchived",
+  sessionsCleanup: "sessions.cleanup",
   sessionsReload: "sessions.reload",
   promptAttachments: "prompt.attachments",
   workspaceFileSuggestions: "workspace.fileSuggestions",
@@ -160,6 +161,44 @@ export interface ArchiveSessionsResponse {
   sessionIds?: string[];
   archivedCount?: number;
   skippedAlreadyArchivedCount?: number;
+}
+
+export interface SessionCleanupRequest {
+  /** Archive non-archived sessions whose modified time is older than this many days. Omit/null to disable. */
+  archiveIdleDays?: number | null;
+  /** Permanently delete archived sessions whose archivedAt time is older than this many days. Omit/null to disable. */
+  deleteArchivedDays?: number | null;
+  /** Stored cwd paths selected from a preview. Omit/null to include all discovered project/workspace paths. */
+  projectCwds?: string[] | null;
+}
+
+export interface SessionCleanupThresholds {
+  archiveIdleDays?: number;
+  deleteArchivedDays?: number;
+}
+
+export interface SessionCleanupProjectSummary {
+  cwd: string;
+  archiveCount: number;
+  deleteCount: number;
+}
+
+export interface SessionCleanupTotals {
+  archiveCount: number;
+  deleteCount: number;
+}
+
+export interface SessionCleanupPreviewResponse {
+  generatedAt: string;
+  thresholds: SessionCleanupThresholds;
+  projects: SessionCleanupProjectSummary[];
+  totals: SessionCleanupTotals;
+  skippedBusySessionIds?: string[];
+}
+
+export interface SessionCleanupExecuteResponse extends SessionCleanupPreviewResponse {
+  archivedSessionIds: string[];
+  deletedSessionIds: string[];
 }
 
 export interface SessionActivity {
