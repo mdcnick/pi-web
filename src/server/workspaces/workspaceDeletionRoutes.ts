@@ -4,14 +4,16 @@ import { workspaceDeletionMetadata } from "../../shared/workspaceDeletion.js";
 import { SessionDaemonClient } from "../../sessiond/sessionDaemonClient.js";
 import type { ProjectService } from "../projects/projectService.js";
 import type { SessionProxyDaemon } from "../sessiond/sessionProxyRoutes.js";
+import { WorkspaceAccessController, workspaceAccessErrorStatus } from "../workspaceAccessPolicy.js";
 import type { WorkspaceService } from "./workspaceService.js";
 
-export function registerWorkspaceDeletionRoutes(app: FastifyInstance, projects: ProjectService, workspaces: WorkspaceService, daemon: SessionProxyDaemon = new SessionDaemonClient(), prefix = "/api"): void {
+export function registerWorkspaceDeletionRoutes(app: FastifyInstance, projects: ProjectService, workspaces: WorkspaceService, daemon: SessionProxyDaemon = new SessionDaemonClient(), prefix = "/api", workspaceAccess: WorkspaceAccessController = new WorkspaceAccessController({ enabled: false })): void {
   app.delete<{ Params: { projectId: string; workspaceId: string } }>(`${prefix}/projects/:projectId/workspaces/:workspaceId`, async (request, reply) => {
     try {
+      workspaceAccess.requireAdmin(request);
       return await deleteWorkspace(projects, workspaces, daemon, request.params.projectId, request.params.workspaceId);
     } catch (error) {
-      return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
+      return reply.code(workspaceAccessErrorStatus(error)).send({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 }

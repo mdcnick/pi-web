@@ -70,6 +70,7 @@ This maps naturally to real development work:
 - Send prompts, shell input, and supported commands through the Pi SDK path.
 - Reuse your existing Pi auth and model configuration from `~/.pi/agent`.
 - Extend the UI with trusted plugins that add actions, workspace panels, and workspace-label metadata. See [Plugin API](docs/plugins.md) for LLM-friendly plugin-building docs.
+- Bridge trusted Telegram users into isolated PI WEB sessions with the bundled/local [Telegram Gateway plugin](docs/telegram-gateway.md).
 
 ## Architecture
 

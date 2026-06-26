@@ -1,0 +1,9 @@
+{
+  "name": "@pi-web/telegram-gateway-plugin",
+  "private": true,
+  "piWeb": {
+    "plugins": [
+      { "id": "telegram-gateway", "module": "pi-web-plugin.js", "machineSpecific": true }
+    ]
+  }
+}

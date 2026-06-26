@@ -5,29 +5,33 @@ import { resolveWorkspaceContext } from "./workspaces/workspaceContext.js";
 import { listWorkspaceTree } from "./workspaces/fileTreeService.js";
 import { readWorkspaceFile } from "./workspaces/fileContentService.js";
 import { readWorkspaceImagePreview } from "./workspaces/imagePreviewService.js";
+import { WorkspaceAccessController, workspaceAccessErrorStatus } from "./workspaceAccessPolicy.js";
 
-export function registerWorkspaceExplorerRoutes(app: FastifyInstance, projects: ProjectService, workspaces: WorkspaceService, prefix = "/api"): void {
+export function registerWorkspaceExplorerRoutes(app: FastifyInstance, projects: ProjectService, workspaces: WorkspaceService, prefix = "/api", workspaceAccess: WorkspaceAccessController = new WorkspaceAccessController({ enabled: false })): void {
   app.get<{ Params: { projectId: string; workspaceId: string }; Querystring: { path?: string } }>(`${prefix}/projects/:projectId/workspaces/:workspaceId/tree`, async (request, reply) => {
     try {
       const context = await resolveWorkspaceContext(projects, workspaces, request.params.projectId, request.params.workspaceId);
+      workspaceAccess.requireWorkspace(request, context.root);
       return await listWorkspaceTree(context.root, request.query.path);
     } catch (error) {
-      return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
+      return reply.code(workspaceAccessErrorStatus(error)).send({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
   app.get<{ Params: { projectId: string; workspaceId: string }; Querystring: { path?: string } }>(`${prefix}/projects/:projectId/workspaces/:workspaceId/file`, async (request, reply) => {
     try {
       const context = await resolveWorkspaceContext(projects, workspaces, request.params.projectId, request.params.workspaceId);
+      workspaceAccess.requireWorkspace(request, context.root);
       return await readWorkspaceFile(context.root, request.query.path);
     } catch (error) {
-      return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
+      return reply.code(workspaceAccessErrorStatus(error)).send({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
   app.get<{ Params: { projectId: string; workspaceId: string }; Querystring: { path?: string } }>(`${prefix}/projects/:projectId/workspaces/:workspaceId/file/preview`, async (request, reply) => {
     try {
       const context = await resolveWorkspaceContext(projects, workspaces, request.params.projectId, request.params.workspaceId);
+      workspaceAccess.requireWorkspace(request, context.root);
       const preview = await readWorkspaceImagePreview(context.root, request.query.path);
       return await reply
         .type(preview.mimeType)
@@ -38,7 +42,7 @@ export function registerWorkspaceExplorerRoutes(app: FastifyInstance, projects: 
         .header("X-Content-Type-Options", "nosniff")
         .send(preview.stream);
     } catch (error) {
-      return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
+      return reply.code(workspaceAccessErrorStatus(error)).send({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 }

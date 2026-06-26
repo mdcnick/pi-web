@@ -1,0 +1,9 @@
+{
+  "name": "@pi-web/workspace-auth-plugin",
+  "private": true,
+  "piWeb": {
+    "plugins": [
+      { "id": "workspace-auth", "module": "pi-web-plugin.js", "machineSpecific": true }
+    ]
+  }
+}

@@ -24,6 +24,8 @@ import { MachineService } from "./machines/machineService.js";
 import { registerMachineRoutes } from "./machines/machineRoutes.js";
 import { registerMachineProxyRoutes } from "./machines/machineProxyRoutes.js";
 import { proxyMachinePluginAsset, registerMachinePluginProxyRoutes } from "./machines/machinePluginProxyRoutes.js";
+import { WorkspaceAccessController, workspaceAccessErrorStatus } from "./workspaceAccessPolicy.js";
+import type { Project } from "./types.js";
 
 export interface AppDependencies {
   projects?: ProjectService;
@@ -32,34 +34,52 @@ export interface AppDependencies {
   sessionDaemon?: SessionProxyDaemon;
   piWebPlugins?: Pick<PiWebPluginService, "manifest" | "plugins" | "readAsset">;
   config?: PiWebConfigService;
+  workspaceAccess?: WorkspaceAccessController;
   clientDist?: string | false;
   logger?: FastifyServerOptions["logger"];
   /** Maximum accepted HTTP request body size in bytes. */
   bodyLimit?: number;
 }
 
-function registerLocalProjectRoutes(app: FastifyInstance, projects: ProjectService, workspaces: WorkspaceService, prefix: string): void {
-  app.get(`${prefix}/projects`, async () => projects.list());
+function registerLocalProjectRoutes(app: FastifyInstance, projects: ProjectService, workspaces: WorkspaceService, workspaceAccess: WorkspaceAccessController, prefix: string): void {
+  app.get(`${prefix}/projects`, async (request, reply) => {
+    try {
+      if (!workspaceAccess.isEnabled()) return await projects.list();
+      const user = workspaceAccess.requireUser(request);
+      const allProjects = await projects.list();
+      const filtered: Project[] = [];
+      for (const project of allProjects) {
+        const projectWorkspaces = await workspaces.list(project);
+        if (projectWorkspaces.some((workspace) => workspaceAccess.canAccessWorkspace(user, workspace.path))) filtered.push(project);
+      }
+      return filtered;
+    } catch (error) {
+      return reply.code(workspaceAccessErrorStatus(error)).send({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
 
   app.post<{ Body: { name?: string; path: string; create?: boolean } }>(`${prefix}/projects`, async (request, reply) => {
     try {
+      workspaceAccess.requireAdmin(request);
       return await projects.add(request.body);
     } catch (error) {
-      return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
+      return reply.code(workspaceAccessErrorStatus(error)).send({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
   app.delete<{ Params: { projectId: string } }>(`${prefix}/projects/:projectId`, async (request, reply) => {
     try {
+      workspaceAccess.requireAdmin(request);
       await projects.close(request.params.projectId);
       return { closed: true };
     } catch (error) {
-      return reply.code(404).send({ error: error instanceof Error ? error.message : String(error) });
+      return reply.code(workspaceAccessErrorStatus(error)).send({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
   app.get<{ Querystring: { q?: string } }>(`${prefix}/project-directories`, async (request, reply) => {
     try {
+      workspaceAccess.requireAdmin(request);
       return await listDirectorySuggestions(request.query.q ?? "");
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
@@ -69,22 +89,26 @@ function registerLocalProjectRoutes(app: FastifyInstance, projects: ProjectServi
   app.get<{ Params: { projectId: string } }>(`${prefix}/projects/:projectId/workspaces`, async (request, reply) => {
     try {
       const project = await projects.requireProject(request.params.projectId);
-      return await workspaces.list(project);
+      const list = await workspaces.list(project);
+      if (!workspaceAccess.isEnabled()) return list;
+      const user = workspaceAccess.requireUser(request);
+      return list.filter((workspace) => workspaceAccess.canAccessWorkspace(user, workspace.path));
     } catch (error) {
-      return reply.code(404).send({ error: error instanceof Error ? error.message : String(error) });
+      return reply.code(workspaceAccessErrorStatus(error)).send({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 }
 
-function registerLocalFileSuggestionRoutes(app: FastifyInstance, prefix: string): void {
+function registerLocalFileSuggestionRoutes(app: FastifyInstance, workspaceAccess: WorkspaceAccessController, prefix: string): void {
   app.get<{ Querystring: { cwd?: string; q?: string; kind?: "tracked" | "untracked" | "other"; mode?: "file" | "path"; scope?: "tracked" | "all" } }>(`${prefix}/files`, async (request, reply) => {
     if (request.query.cwd === undefined || request.query.cwd === "") return reply.code(400).send({ error: "cwd query parameter is required" });
     try {
       const cwd = normalizeRequestCwd(request.query.cwd);
+      workspaceAccess.requireWorkspace(request, cwd);
       if (request.query.mode === "path") return await listPathSuggestions(cwd, request.query.q ?? "");
       return await listFileSuggestions(cwd, request.query.q ?? "", { kind: request.query.kind, scope: request.query.scope });
     } catch (error) {
-      return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
+      return reply.code(workspaceAccessErrorStatus(error)).send({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 }
@@ -97,11 +121,21 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
   const workspaces = deps.workspaces ?? new WorkspaceService();
   const piWebPlugins = deps.piWebPlugins ?? new PiWebPluginService();
   const sessionDaemon = deps.sessionDaemon ?? new SessionDaemonClient();
+  const workspaceAccess = deps.workspaceAccess ?? new WorkspaceAccessController();
   const piWebStatusCache = createPiWebStatusCache(() => getPiWebStatus(sessionDaemon), {
     onError: (error) => { app.log.warn({ err: error }, "failed to refresh PI WEB status cache"); },
   });
   const machines = deps.machines ?? new MachineService(undefined, {
     localRuntime: () => getPiWebRuntime(sessionDaemon),
+  });
+
+  app.addHook("preHandler", async (request) => {
+    await workspaceAccess.authenticateRequest(request);
+    if (!workspaceAccess.isEnabled()) return;
+    const path = request.url.split("?", 1)[0] ?? request.url;
+    if (path === "/api/config" || (path.startsWith("/api/machines") && !path.startsWith("/api/machines/local"))) {
+      workspaceAccess.requireAdmin(request);
+    }
   });
 
   app.get("/pi-web-plugins/manifest.json", async () => piWebPlugins.manifest());
@@ -123,22 +157,22 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
   registerMachineRoutes(app, machines);
   registerMachinePluginProxyRoutes(app, machines);
 
-  registerLocalProjectRoutes(app, projects, workspaces, "/api");
-  registerLocalProjectRoutes(app, projects, workspaces, "/api/machines/local");
+  registerLocalProjectRoutes(app, projects, workspaces, workspaceAccess, "/api");
+  registerLocalProjectRoutes(app, projects, workspaces, workspaceAccess, "/api/machines/local");
 
-  registerSessionProxyRoutes(app, sessionDaemon);
-  registerSessionProxyRoutes(app, sessionDaemon, "/api/machines/local");
-  registerWorkspaceExplorerRoutes(app, projects, workspaces);
-  registerWorkspaceExplorerRoutes(app, projects, workspaces, "/api/machines/local");
-  registerGitRoutes(app, projects, workspaces);
-  registerGitRoutes(app, projects, workspaces, "/api/machines/local");
-  registerTerminalProxyRoutes(app, projects, workspaces, sessionDaemon);
-  registerTerminalProxyRoutes(app, projects, workspaces, sessionDaemon, "/api/machines/local");
-  registerWorkspaceDeletionRoutes(app, projects, workspaces, sessionDaemon);
-  registerWorkspaceDeletionRoutes(app, projects, workspaces, sessionDaemon, "/api/machines/local");
+  registerSessionProxyRoutes(app, sessionDaemon, "/api", workspaceAccess);
+  registerSessionProxyRoutes(app, sessionDaemon, "/api/machines/local", workspaceAccess);
+  registerWorkspaceExplorerRoutes(app, projects, workspaces, "/api", workspaceAccess);
+  registerWorkspaceExplorerRoutes(app, projects, workspaces, "/api/machines/local", workspaceAccess);
+  registerGitRoutes(app, projects, workspaces, "/api", workspaceAccess);
+  registerGitRoutes(app, projects, workspaces, "/api/machines/local", workspaceAccess);
+  registerTerminalProxyRoutes(app, projects, workspaces, sessionDaemon, "/api", workspaceAccess);
+  registerTerminalProxyRoutes(app, projects, workspaces, sessionDaemon, "/api/machines/local", workspaceAccess);
+  registerWorkspaceDeletionRoutes(app, projects, workspaces, sessionDaemon, "/api", workspaceAccess);
+  registerWorkspaceDeletionRoutes(app, projects, workspaces, sessionDaemon, "/api/machines/local", workspaceAccess);
 
-  registerLocalFileSuggestionRoutes(app, "/api");
-  registerLocalFileSuggestionRoutes(app, "/api/machines/local");
+  registerLocalFileSuggestionRoutes(app, workspaceAccess, "/api");
+  registerLocalFileSuggestionRoutes(app, workspaceAccess, "/api/machines/local");
 
   registerMachineProxyRoutes(app, machines);
 

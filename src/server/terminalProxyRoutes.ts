@@ -6,11 +6,13 @@ import { resolveWorkspaceContext } from "./workspaces/workspaceContext.js";
 import type { WorkspaceService } from "./workspaces/workspaceService.js";
 import { terminalSizeQuery } from "./terminals/terminalSize.js";
 import { bridgeSockets } from "./webSocketBridge.js";
+import { WorkspaceAccessController, workspaceAccessErrorStatus } from "./workspaceAccessPolicy.js";
 
-export function registerTerminalProxyRoutes(app: FastifyInstance, projects: ProjectService, workspaces: WorkspaceService, daemon: SessionProxyDaemon = new SessionDaemonClient(), prefix = "/api"): void {
+export function registerTerminalProxyRoutes(app: FastifyInstance, projects: ProjectService, workspaces: WorkspaceService, daemon: SessionProxyDaemon = new SessionDaemonClient(), prefix = "/api", workspaceAccess: WorkspaceAccessController = new WorkspaceAccessController({ enabled: false })): void {
   app.get<{ Params: { projectId: string; workspaceId: string } }>(`${prefix}/projects/:projectId/workspaces/:workspaceId/terminals`, async (request, reply) => {
     try {
       const context = await resolveWorkspaceContext(projects, workspaces, request.params.projectId, request.params.workspaceId);
+      workspaceAccess.requireWorkspace(request, context.root);
       return await proxyJson(daemon, "GET", `/terminals?cwd=${encodeURIComponent(context.root)}`, undefined, reply);
     } catch (error) {
       requestFailed(reply, error);
@@ -21,6 +23,7 @@ export function registerTerminalProxyRoutes(app: FastifyInstance, projects: Proj
   app.delete<{ Params: { projectId: string; workspaceId: string } }>(`${prefix}/projects/:projectId/workspaces/:workspaceId/terminals`, async (request, reply) => {
     try {
       const context = await resolveWorkspaceContext(projects, workspaces, request.params.projectId, request.params.workspaceId);
+      workspaceAccess.requireWorkspace(request, context.root);
       return await proxyJson(daemon, "DELETE", `/terminals?cwd=${encodeURIComponent(context.root)}`, undefined, reply);
     } catch (error) {
       requestFailed(reply, error);
@@ -31,6 +34,7 @@ export function registerTerminalProxyRoutes(app: FastifyInstance, projects: Proj
   app.post<{ Params: { projectId: string; workspaceId: string }; Body: { name?: string; cols?: number; rows?: number } }>(`${prefix}/projects/:projectId/workspaces/:workspaceId/terminals`, async (request, reply) => {
     try {
       const context = await resolveWorkspaceContext(projects, workspaces, request.params.projectId, request.params.workspaceId);
+      workspaceAccess.requireWorkspace(request, context.root);
       return await proxyJson(daemon, "POST", "/terminals", { ...request.body, cwd: context.root }, reply);
     } catch (error) {
       requestFailed(reply, error);
@@ -40,7 +44,8 @@ export function registerTerminalProxyRoutes(app: FastifyInstance, projects: Proj
 
   app.post<{ Params: { projectId: string; workspaceId: string; terminalId: string } }>(`${prefix}/projects/:projectId/workspaces/:workspaceId/terminals/:terminalId/continue`, async (request, reply) => {
     try {
-      await resolveWorkspaceContext(projects, workspaces, request.params.projectId, request.params.workspaceId);
+      const context = await resolveWorkspaceContext(projects, workspaces, request.params.projectId, request.params.workspaceId);
+      workspaceAccess.requireWorkspace(request, context.root);
       return await proxyJson(daemon, "POST", `/terminals/${encodeURIComponent(request.params.terminalId)}/continue`, undefined, reply);
     } catch (error) {
       requestFailed(reply, error);
@@ -50,7 +55,8 @@ export function registerTerminalProxyRoutes(app: FastifyInstance, projects: Proj
 
   app.delete<{ Params: { projectId: string; workspaceId: string; terminalId: string } }>(`${prefix}/projects/:projectId/workspaces/:workspaceId/terminals/:terminalId`, async (request, reply) => {
     try {
-      await resolveWorkspaceContext(projects, workspaces, request.params.projectId, request.params.workspaceId);
+      const context = await resolveWorkspaceContext(projects, workspaces, request.params.projectId, request.params.workspaceId);
+      workspaceAccess.requireWorkspace(request, context.root);
       return await proxyJson(daemon, "DELETE", `/terminals/${encodeURIComponent(request.params.terminalId)}`, undefined, reply);
     } catch (error) {
       requestFailed(reply, error);
@@ -61,6 +67,7 @@ export function registerTerminalProxyRoutes(app: FastifyInstance, projects: Proj
   app.post<{ Params: { projectId: string; workspaceId: string }; Body: TerminalCommandRunRequest }>(`${prefix}/projects/:projectId/workspaces/:workspaceId/terminal-command-runs`, async (request, reply) => {
     try {
       const context = await resolveWorkspaceContext(projects, workspaces, request.params.projectId, request.params.workspaceId);
+      workspaceAccess.requireWorkspace(request, context.root);
       return await proxyJson(daemon, "POST", "/terminal-command-runs", {
         origin: request.body.origin,
         projectId: request.params.projectId,
@@ -105,7 +112,8 @@ export function registerTerminalProxyRoutes(app: FastifyInstance, projects: Proj
 
   app.get<{ Params: { projectId: string; workspaceId: string; terminalId: string }; Querystring: { cols?: string; rows?: string } }>(`${prefix}/projects/:projectId/workspaces/:workspaceId/terminals/:terminalId/socket`, { websocket: true }, async (socket, request) => {
     try {
-      await resolveWorkspaceContext(projects, workspaces, request.params.projectId, request.params.workspaceId);
+      const context = await resolveWorkspaceContext(projects, workspaces, request.params.projectId, request.params.workspaceId);
+      workspaceAccess.requireWorkspace(request, context.root);
       const sizeQuery = terminalSizeQuery(request.query.cols, request.query.rows);
       bridgeSockets(socket, daemon.connectWebSocket(`/terminals/${request.params.terminalId}/socket${sizeQuery}`));
     } catch (error) {
@@ -151,6 +159,6 @@ async function proxyJson(daemon: SessionProxyDaemon, method: string, path: strin
 }
 
 function requestFailed(reply: FastifyReply, error: unknown): void {
-  reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
+  reply.code(workspaceAccessErrorStatus(error)).send({ error: error instanceof Error ? error.message : String(error) });
 }
 

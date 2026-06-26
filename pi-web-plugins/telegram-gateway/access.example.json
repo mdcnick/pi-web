@@ -1,0 +1,15 @@
+{
+  "$schemaComment": "Shared PI WEB workspace access map. Clerk user IDs are the stable user keys; Telegram IDs can link into them.",
+  "users": {
+    "user_example_alice": {
+      "label": "Alice",
+      "workspaces": ["/home/nick/pi-friends/alice"],
+      "telegramUserIds": [123456789]
+    },
+    "user_example_bob": {
+      "label": "Bob",
+      "workspaces": ["/home/nick/pi-friends/bob"],
+      "telegramUserIds": [987654321]
+    }
+  }
+}

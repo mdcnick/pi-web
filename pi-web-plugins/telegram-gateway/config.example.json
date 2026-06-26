@@ -1,0 +1,21 @@
+{
+  "$schemaComment": "Copy to ~/.pi-web/telegram-gateway/config.json. Prefer TELEGRAM_BOT_TOKEN env var instead of storing a token here.",
+  "telegramBotToken": "",
+  "piWebBaseUrl": "http://127.0.0.1:8504",
+  "machineId": "local",
+  "defaultCwd": "/absolute/path/to/default/workspace",
+  "workspaceAccessPath": "~/.pi-web/workspace-access.json",
+  "allowedTelegramUserIds": [123456789],
+  "adminTelegramUserIds": [123456789],
+  "userRoutes": {
+    "123456789": {
+      "label": "Nick",
+      "cwd": "/absolute/path/to/default/workspace"
+    }
+  },
+  "statePath": "~/.pi-web/telegram-gateway/state.json",
+  "pollTimeoutSeconds": 25,
+  "requestTimeoutMs": 30000,
+  "responseTimeoutMs": 900000,
+  "maxTelegramChunk": 3900
+}
