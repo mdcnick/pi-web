@@ -41,6 +41,45 @@ export interface MachineRuntime {
   error?: string;
 }
 
+export interface SystemResourceSnapshot {
+  hostname: string;
+  platform: string;
+  sampledAt: string;
+  uptimeSeconds: number;
+  cpu: {
+    cores: number;
+    model?: string;
+    usagePercent: number | null;
+    loadAverage: number[];
+  };
+  memory: {
+    totalBytes: number;
+    usedBytes: number;
+    freeBytes: number;
+    usagePercent: number;
+  };
+  storage: {
+    mountPoint: string;
+    filesystem: string;
+    totalBytes: number;
+    usedBytes: number;
+    availableBytes: number;
+    usagePercent: number;
+  }[];
+  diskIo: {
+    readBytes: number;
+    writeBytes: number;
+    readBytesPerSecond: number | null;
+    writeBytesPerSecond: number | null;
+  };
+  network: {
+    rxBytes: number;
+    txBytes: number;
+    rxBytesPerSecond: number | null;
+    txBytesPerSecond: number | null;
+  };
+}
+
 export type PiWebShortcutConfig = Record<string, string | null>;
 export type PiWebPluginSettings = Record<string, unknown>;
 export type PiWebPluginConfigMap = Record<string, PiWebPluginConfig>;

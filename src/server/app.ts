@@ -27,6 +27,7 @@ import { proxyMachinePluginAsset, registerMachinePluginProxyRoutes } from "./mac
 import { WorkspaceAccessController, workspaceAccessErrorStatus } from "./workspaceAccessPolicy.js";
 import { registerWorkspaceAccessRoutes } from "./workspaceAccessRoutes.js";
 import { registerJarvisRoutes } from "./jarvisRoutes.js";
+import { registerSystemResourceRoutes } from "./systemResourceRoutes.js";
 import type { Project } from "./types.js";
 
 export interface AppDependencies {
@@ -135,7 +136,10 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
     await workspaceAccess.authenticateRequest(request);
     if (!workspaceAccess.isEnabled()) return;
     const path = request.url.split("?", 1)[0] ?? request.url;
-    if (path === "/api/config" || (path.startsWith("/api/machines") && !path.startsWith("/api/machines/local"))) {
+    if (path === "/api/config"
+      || path === "/api/system/resources"
+      || path === "/api/machines/local/system/resources"
+      || (path.startsWith("/api/machines") && !path.startsWith("/api/machines/local"))) {
       workspaceAccess.requireAdmin(request);
     }
   });
@@ -174,6 +178,8 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
   registerTerminalProxyRoutes(app, projects, workspaces, sessionDaemon, "/api/machines/local", workspaceAccess);
   registerWorkspaceDeletionRoutes(app, projects, workspaces, sessionDaemon, "/api", workspaceAccess);
   registerWorkspaceDeletionRoutes(app, projects, workspaces, sessionDaemon, "/api/machines/local", workspaceAccess);
+  registerSystemResourceRoutes(app, "/api");
+  registerSystemResourceRoutes(app, "/api/machines/local");
 
   registerLocalFileSuggestionRoutes(app, workspaceAccess, "/api");
   registerLocalFileSuggestionRoutes(app, workspaceAccess, "/api/machines/local");

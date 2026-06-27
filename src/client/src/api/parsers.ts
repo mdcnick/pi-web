@@ -1,4 +1,4 @@
-import type { ArchiveSessionsResponse, AuthProviderOption, AuthProviderStatus, AuthProvidersResponse, AuthStatusSource, AuthType, CommandOption, CommandResult, FileContentResponse, FileSuggestion, FileTreeEntry, FileTreeResponse, GitDiffResponse, GitFileState, GitStatusFile, GitStatusResponse, Machine, MachineHealth, MachineKind, MachineRuntime, MachineStatus, MessagePage, ModelSelectionResponse, OAuthFlowState, PiWebCapability, PiWebComponentStatus, PiWebConfigEnvOverrides, PiWebConfigResponse, PiWebConfigValues, PiWebInstallationInfo, PiWebPluginConfigMap, PiWebPluginInfo, PiWebPluginsResponse, PiWebPluginScope, PiWebReleaseStatus, PiWebRuntimeComponent, PiWebRuntimeResponse, PiWebServiceComponent, PiWebShortcutConfig, PiWebStatusMessage, PiWebStatusResponse, PiWebStatusSeverity, Project, QueuedSessionMessage, SavedPromptAttachment, SessionInfo, SessionModel, SessionStatus, SlashCommand, TerminalCommandRun, TerminalCommandRunStatus, TerminalInfo, ThinkingLevelsResponse, Workspace, WorkspaceActivity, WorkspaceActivityResponse } from "../../../shared/apiTypes";
+import type { ArchiveSessionsResponse, AuthProviderOption, AuthProviderStatus, AuthProvidersResponse, AuthStatusSource, AuthType, CommandOption, CommandResult, FileContentResponse, FileSuggestion, FileTreeEntry, FileTreeResponse, GitDiffResponse, GitFileState, GitStatusFile, GitStatusResponse, Machine, MachineHealth, MachineKind, MachineRuntime, MachineStatus, MessagePage, ModelSelectionResponse, OAuthFlowState, PiWebCapability, PiWebComponentStatus, PiWebConfigEnvOverrides, PiWebConfigResponse, PiWebConfigValues, PiWebInstallationInfo, PiWebPluginConfigMap, PiWebPluginInfo, PiWebPluginsResponse, PiWebPluginScope, PiWebReleaseStatus, PiWebRuntimeComponent, PiWebRuntimeResponse, PiWebServiceComponent, PiWebShortcutConfig, PiWebStatusMessage, PiWebStatusResponse, PiWebStatusSeverity, Project, QueuedSessionMessage, SavedPromptAttachment, SessionInfo, SessionModel, SessionStatus, SlashCommand, SystemResourceSnapshot, TerminalCommandRun, TerminalCommandRunStatus, TerminalInfo, ThinkingLevelsResponse, Workspace, WorkspaceActivity, WorkspaceActivityResponse } from "../../../shared/apiTypes";
 import { isPiWebCapability } from "../../../shared/capabilities";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -49,6 +49,11 @@ function parseUnknownArray(value: unknown): unknown[] {
 
 function arrayOfString(value: unknown, key: string): string[] {
   if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) throw new Error(`Expected string array field: ${key}`);
+  return value;
+}
+
+function arrayOfNumber(value: unknown, key: string): number[] {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "number")) throw new Error(`Expected number array field: ${key}`);
   return value;
 }
 
@@ -108,6 +113,73 @@ export function parseMachineRuntime(value: unknown): MachineRuntime {
     ...(record["components"] === undefined ? {} : { components: parsePiWebRuntimeComponents(record["components"]) }),
     ...(record["capabilities"] === undefined ? {} : { capabilities: parsePiWebCapabilities(record["capabilities"]) }),
     ...(error === undefined ? {} : { error }),
+  };
+}
+
+export function parseSystemResourceSnapshot(value: unknown): SystemResourceSnapshot {
+  const record = requireRecord(value);
+  return {
+    hostname: requireString(record, "hostname"),
+    platform: requireString(record, "platform"),
+    sampledAt: requireString(record, "sampledAt"),
+    uptimeSeconds: requireNumber(record, "uptimeSeconds"),
+    cpu: parseSystemCpu(record["cpu"]),
+    memory: parseSystemMemory(record["memory"]),
+    storage: arrayOf(parseSystemStorage)(record["storage"]),
+    diskIo: parseSystemDiskIo(record["diskIo"]),
+    network: parseSystemNetwork(record["network"]),
+  };
+}
+
+function parseSystemCpu(value: unknown): SystemResourceSnapshot["cpu"] {
+  const record = requireRecord(value);
+  return {
+    cores: requireNumber(record, "cores"),
+    ...optionalField("model", optionalString(record, "model")),
+    usagePercent: numberOrNull(record, "usagePercent"),
+    loadAverage: arrayOfNumber(record["loadAverage"], "loadAverage"),
+  };
+}
+
+function parseSystemMemory(value: unknown): SystemResourceSnapshot["memory"] {
+  const record = requireRecord(value);
+  return {
+    totalBytes: requireNumber(record, "totalBytes"),
+    usedBytes: requireNumber(record, "usedBytes"),
+    freeBytes: requireNumber(record, "freeBytes"),
+    usagePercent: requireNumber(record, "usagePercent"),
+  };
+}
+
+function parseSystemStorage(value: unknown): SystemResourceSnapshot["storage"][number] {
+  const record = requireRecord(value);
+  return {
+    mountPoint: requireString(record, "mountPoint"),
+    filesystem: requireString(record, "filesystem"),
+    totalBytes: requireNumber(record, "totalBytes"),
+    usedBytes: requireNumber(record, "usedBytes"),
+    availableBytes: requireNumber(record, "availableBytes"),
+    usagePercent: requireNumber(record, "usagePercent"),
+  };
+}
+
+function parseSystemDiskIo(value: unknown): SystemResourceSnapshot["diskIo"] {
+  const record = requireRecord(value);
+  return {
+    readBytes: requireNumber(record, "readBytes"),
+    writeBytes: requireNumber(record, "writeBytes"),
+    readBytesPerSecond: numberOrNull(record, "readBytesPerSecond"),
+    writeBytesPerSecond: numberOrNull(record, "writeBytesPerSecond"),
+  };
+}
+
+function parseSystemNetwork(value: unknown): SystemResourceSnapshot["network"] {
+  const record = requireRecord(value);
+  return {
+    rxBytes: requireNumber(record, "rxBytes"),
+    txBytes: requireNumber(record, "txBytes"),
+    rxBytesPerSecond: numberOrNull(record, "rxBytesPerSecond"),
+    txBytesPerSecond: numberOrNull(record, "txBytesPerSecond"),
   };
 }
 

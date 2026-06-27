@@ -34,6 +34,7 @@ import {
   parseSessionStatus,
   parseSlashCommand,
   parseStopped,
+  parseSystemResourceSnapshot,
   parseTerminalCommandRun,
   parseTerminalInfo,
   parseThinkingLevelsResponse,
@@ -104,6 +105,10 @@ export const pluginsApi = {
 
 export const activityApi = {
   workspaceActivity: (machineId = "local") => request(`${machinePrefix(machineId)}/activity`, parseWorkspaceActivityResponse),
+};
+
+export const systemApi = {
+  resources: (machineId = "local") => request(`${machinePrefix(machineId)}/system/resources`, parseSystemResourceSnapshot),
 };
 
 export const projectsApi = {
@@ -232,6 +237,7 @@ export const api = {
   ...configApi,
   ...pluginsApi,
   ...activityApi,
+  ...systemApi,
   ...projectsApi,
   ...workspacesApi,
   ...sessionsApi,

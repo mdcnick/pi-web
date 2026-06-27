@@ -30,6 +30,13 @@ export function createCoreWorkspacePanels(): WorkspacePanelContribution[] {
       badge: (context) => context.activeTerminalCount > 0 ? context.activeTerminalCount : undefined,
       render: renderTerminal,
     },
+    {
+      id: "workspace.system",
+      title: "System",
+      icon: renderSystemIcon(),
+      order: 40,
+      render: renderSystemResources,
+    },
   ];
 }
 
@@ -104,6 +111,11 @@ function renderTerminal(context: WorkspacePanelContext): TemplateResult {
   return html`<terminal-panel .workspace=${context.workspace} .machineId=${context.machine.id} .selectedTerminalId=${context.selectedTerminalId} .autoStart=${context.terminalAutoStart} .onSelectTerminal=${context.onSelectTerminal}></terminal-panel>`;
 }
 
+function renderSystemResources(context: WorkspacePanelContext): TemplateResult {
+  loadSystemResourceMonitor();
+  return html`<system-resource-monitor .machineId=${context.machine.id}></system-resource-monitor>`;
+}
+
 function renderGit(context: WorkspacePanelContext): TemplateResult {
   const status = context.gitStatus;
   return html`
@@ -161,6 +173,20 @@ function loadCodeViewer(): void {
 
 function loadTerminalPanel(): void {
   void import("../../components/TerminalPanel");
+}
+
+function loadSystemResourceMonitor(): void {
+  void import("../../components/SystemResourceMonitor");
+}
+
+function renderSystemIcon(): TemplateResult {
+  return html`
+    <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M4 13h3l2-6 4 12 2-6h5"></path>
+      <path d="M4 5h16"></path>
+      <path d="M4 19h16"></path>
+    </svg>
+  `;
 }
 
 function gitSummary(status: GitStatusResponse): string {

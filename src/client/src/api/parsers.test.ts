@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PI_WEB_CAPABILITIES } from "../../../shared/capabilities";
-import { parseCommandResult, parseFileContentResponse, parseFileSuggestion, parseGitStatusResponse, parseMessagePage, parsePiWebConfigResponse, parsePiWebPluginsResponse, parsePiWebRuntimeResponse, parseSessionStatus, parseSlashCommand, parseTerminalCommandRun, parseTerminalInfo, parseWorkspaceActivityResponse } from "./parsers";
+import { parseCommandResult, parseFileContentResponse, parseFileSuggestion, parseGitStatusResponse, parseMessagePage, parsePiWebConfigResponse, parsePiWebPluginsResponse, parsePiWebRuntimeResponse, parseSessionStatus, parseSlashCommand, parseSystemResourceSnapshot, parseTerminalCommandRun, parseTerminalInfo, parseWorkspaceActivityResponse } from "./parsers";
 
 describe("API parsers", () => {
   it("parses PI WEB config responses", () => {
@@ -29,6 +29,20 @@ describe("API parsers", () => {
       },
       capabilities: [PI_WEB_CAPABILITIES.sessionsDeleteArchived],
     })).toMatchObject({ capabilities: [PI_WEB_CAPABILITIES.sessionsDeleteArchived] });
+  });
+
+  it("parses system resource snapshots", () => {
+    expect(parseSystemResourceSnapshot({
+      hostname: "devbox",
+      platform: "linux",
+      sampledAt: "2026-06-26T00:00:00.000Z",
+      uptimeSeconds: 123,
+      cpu: { cores: 8, model: "test cpu", usagePercent: null, loadAverage: [0.1, 0.2, 0.3] },
+      memory: { totalBytes: 100, usedBytes: 40, freeBytes: 60, usagePercent: 40 },
+      storage: [{ mountPoint: "/", filesystem: "/dev/sda1", totalBytes: 1000, usedBytes: 500, availableBytes: 500, usagePercent: 50 }],
+      diskIo: { readBytes: 10, writeBytes: 20, readBytesPerSecond: null, writeBytesPerSecond: 4 },
+      network: { rxBytes: 30, txBytes: 40, rxBytesPerSecond: 5, txBytesPerSecond: null },
+    })).toMatchObject({ hostname: "devbox", cpu: { usagePercent: null }, network: { txBytesPerSecond: null } });
   });
 
   it("parses PI WEB plugin status responses", () => {
