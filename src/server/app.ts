@@ -26,6 +26,7 @@ import { MachineService } from "./machines/machineService.js";
 import { registerMachineRoutes } from "./machines/machineRoutes.js";
 import { registerMachineProxyRoutes } from "./machines/machineProxyRoutes.js";
 import { proxyMachinePluginAsset, registerMachinePluginProxyRoutes } from "./machines/machinePluginProxyRoutes.js";
+import { registerSystemResourceRoutes } from "./systemResourceRoutes.js";
 import type { Project, Workspace } from "./types.js";
 
 export interface AppDependencies {
@@ -163,6 +164,8 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
   registerTerminalProxyRoutes(app, projects, workspaces, sessionDaemon, "/api/machines/local");
   registerWorkspaceDeletionRoutes(app, projects, workspaces, sessionDaemon);
   registerWorkspaceDeletionRoutes(app, projects, workspaces, sessionDaemon, "/api/machines/local");
+  registerSystemResourceRoutes(app, "/api");
+  registerSystemResourceRoutes(app, "/api/machines/local");
 
   registerLocalFileSuggestionRoutes(app, projects, workspaces, "/api", { config: configService });
   registerLocalFileSuggestionRoutes(app, projects, workspaces, "/api/machines/local", { config: configService });

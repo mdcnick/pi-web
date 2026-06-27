@@ -33,6 +33,7 @@ export const FEDERATED_HTTP_ROUTES = [
   { method: "POST", path: "/terminal-command-runs/:runId/cancel" },
   { method: "GET", path: "/files" },
   { method: "GET", path: "/activity" },
+  { method: "GET", path: "/system/resources" },
   { method: "GET", path: "/sessions" },
   { method: "POST", path: "/sessions" },
   { method: "POST", path: "/sessions/cleanup/preview" },
