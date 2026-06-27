@@ -18,6 +18,7 @@ x-pi-web-dev-environment: &pi-web-dev-environment
   PI_WEB_SESSIOND_SOCKET: /data/pi-web/sessiond.sock
   PI_CODING_AGENT_DIR: /data/pi-agent
   HOSTEXEC_IMAGE: ${HOSTEXEC_IMAGE:-alpine:3.22}
+  HOSTEXEC_MODE: ${HOSTEXEC_MODE:-disabled}
   PI_WEB_MAX_UPLOAD_BYTES: ${PI_WEB_MAX_UPLOAD_BYTES:-67108864}
   NPM_CONFIG_UPDATE_NOTIFIER: "false"
   NPM_CONFIG_CACHE: /data/npm-cache
@@ -35,22 +36,6 @@ x-pi-web-dev-volumes: &pi-web-dev-volumes
     source: node_modules
     target: /workspace/node_modules
   - *pi-web-dev-data-volume
-  - type: bind
-    source: /var/run/docker.sock
-    target: /var/run/docker.sock
-  - type: bind
-    source: /srv
-    target: /srv
-  - type: bind
-    source: /opt
-    target: /opt
-  - type: bind
-    source: /home
-    target: /home
-  - type: bind
-    source: /
-    target: /host
-    read_only: true
 
 services:
   data-init:

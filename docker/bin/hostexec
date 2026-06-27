@@ -38,6 +38,20 @@ if [ "$#" -eq 0 ]; then
   exit 64
 fi
 
+hostexec_mode="${HOSTEXEC_MODE:-nsenter}"
+case "$hostexec_mode" in
+  nsenter) ;;
+  disabled|none)
+    echo "hostexec: disabled for this Docker host profile" >&2
+    echo "hostexec: on Docker Desktop for Mac, containers run inside a Linux VM and cannot enter native macOS namespaces" >&2
+    exit 69
+    ;;
+  *)
+    echo "hostexec: unsupported HOSTEXEC_MODE: $hostexec_mode" >&2
+    exit 64
+    ;;
+esac
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "hostexec: docker CLI not found in this container" >&2
   exit 127

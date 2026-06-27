@@ -39,6 +39,12 @@ Options:
   --skip-compose          Write assets/.env but skip build and service recreate
   -h, --help              Show this help
 
+Progressive host setup:
+  The installer supports native Linux Docker Engine and Docker Desktop for Mac.
+  Unknown Docker hosts fail closed before services are recreated. Set
+  PI_WEB_DOCKER_EXTRA_HOST_PATHS to a whitespace-separated list of additional
+  existing absolute directories to bind-mount at the same path in the containers.
+
 Environment variables with the same names used in .env may also be set before
 running the installer, for example:
 
@@ -223,30 +229,6 @@ dotenv_quote() {
   printf '"%s"' "$(printf '%s' "$value" | sed 's/[\\"]/\\&/g')"
 }
 
-detect_docker_gid() {
-  if [ -S /var/run/docker.sock ]; then
-    if gid=$(stat -c '%g' /var/run/docker.sock 2>/dev/null); then
-      printf '%s\n' "$gid"
-      return 0
-    fi
-    if gid=$(stat -f '%g' /var/run/docker.sock 2>/dev/null); then
-      printf '%s\n' "$gid"
-      return 0
-    fi
-  fi
-
-  if command -v getent >/dev/null 2>&1; then
-    if gid=$(getent group docker | awk -F: 'NR == 1 { print $3 }'); then
-      if [ -n "$gid" ]; then
-        printf '%s\n' "$gid"
-        return 0
-      fi
-    fi
-  fi
-
-  printf '0\n'
-}
-
 fetch_url() {
   url=$1
   target=$2
@@ -292,13 +274,11 @@ write_asset() {
 }
 
 compose_cmd() {
-  if docker compose version >/dev/null 2>&1; then
-    docker compose "$@"
-  elif command -v docker-compose >/dev/null 2>&1; then
-    docker-compose "$@"
-  else
-    die "Docker Compose is required (docker compose plugin or docker-compose)"
-  fi
+  pi_web_docker_compose "$@"
+}
+
+run_runtime_compose() {
+  compose_cmd -f compose.yml -f compose.override.yml "$@"
 }
 
 if [ -n "${XDG_DATA_HOME:-}" ]; then
@@ -332,12 +312,37 @@ else
   log "Fetching Docker assets from $asset_base"
 fi
 
+profile_helper_temp=
+cleanup_profile_helper() {
+  [ -z "$profile_helper_temp" ] || rm -f "$profile_helper_temp"
+}
+trap cleanup_profile_helper EXIT
+
+if [ -n "$asset_dir" ]; then
+  profile_helper=$asset_dir/lib/host-profile.sh
+  [ -f "$profile_helper" ] || die "missing Docker asset: $profile_helper"
+else
+  profile_helper_temp=${TMPDIR:-/tmp}/pi-web-host-profile.$$
+  fetch_url "$asset_base/lib/host-profile.sh" "$profile_helper_temp"
+  profile_helper=$profile_helper_temp
+fi
+
+# shellcheck source=lib/host-profile.sh
+# shellcheck disable=SC1091
+. "$profile_helper"
+
+if ! pi_web_docker_host_detect_profile; then
+  pi_web_docker_host_print_detection_failure
+  die "refusing to install on an unsupported or unknown Docker host setup"
+fi
+
 write_asset Dockerfile 0644
 write_asset compose.yml 0644
 write_asset .dockerignore 0644
 write_asset install.sh 0755
 write_asset bin/hostexec 0755
 write_asset bin/install-opensuse-base 0755
+write_asset lib/host-profile.sh 0644
 
 custom_image_hooks_dir=$install_dir/custom-image.d
 mkdir -p "$custom_image_hooks_dir" || die "could not create custom image hooks directory: $custom_image_hooks_dir"
@@ -347,7 +352,9 @@ fi
 
 pi_web_uid=$(value_from_env_or_default PI_WEB_UID "$(id -u)")
 pi_web_gid=$(value_from_env_or_default PI_WEB_GID "$(id -g)")
-docker_gid=$(value_from_env_or_default DOCKER_GID "$(detect_docker_gid)")
+docker_gid=$(value_from_env_or_default DOCKER_GID "$(pi_web_docker_host_detect_docker_gid)")
+pi_web_host_profile=$PI_WEB_DETECTED_DOCKER_HOST_PROFILE
+hostexec_mode=$PI_WEB_DETECTED_HOSTEXEC_MODE
 
 raw_data_dir=$(value_from_env_or_existing_or_default PI_WEB_DOCKER_DATA_DIR "$install_dir/data")
 data_dir=$(absolute_dir "$(path_from_base "$install_dir" "$raw_data_dir")") || die "could not create data directory"
@@ -363,10 +370,13 @@ pi_web_extra_zypper_packages=$(value_from_env_or_existing_or_default PI_WEB_EXTR
 pi_web_image=$(value_from_env_or_existing_or_default PI_WEB_IMAGE pi-web:local)
 hostexec_image=$(value_from_env_or_existing_or_default HOSTEXEC_IMAGE alpine:3.22)
 pi_web_max_upload_bytes=$(value_from_env_or_existing_or_default PI_WEB_MAX_UPLOAD_BYTES 67108864)
+pi_web_extra_host_paths=$(value_from_env_or_existing_or_default PI_WEB_DOCKER_EXTRA_HOST_PATHS "")
 
 require_non_empty PI_WEB_UID "$pi_web_uid"
 require_non_empty PI_WEB_GID "$pi_web_gid"
 require_non_empty DOCKER_GID "$docker_gid"
+require_non_empty PI_WEB_DOCKER_HOST_PROFILE "$pi_web_host_profile"
+require_non_empty HOSTEXEC_MODE "$hostexec_mode"
 require_non_empty PI_WEB_DOCKER_DATA_DIR "$data_dir"
 require_non_empty PI_WEB_BIND_ADDR "$pi_web_bind_addr"
 require_non_empty PI_WEB_PORT "$pi_web_port"
@@ -380,6 +390,11 @@ require_non_empty HOSTEXEC_IMAGE "$hostexec_image"
 require_non_empty PI_WEB_MAX_UPLOAD_BYTES "$pi_web_max_upload_bytes"
 
 pi_web_extra_zypper_packages_env=$(dotenv_quote "$pi_web_extra_zypper_packages")
+pi_web_extra_host_paths_env=$(dotenv_quote "$pi_web_extra_host_paths")
+compose_override_file=$install_dir/compose.override.yml
+if ! pi_web_docker_host_write_compose_override "$compose_override_file" "$pi_web_host_profile" "$pi_web_extra_host_paths"; then
+  die "could not write host-specific Compose override"
+fi
 
 umask 077
 temp_env=$env_file.$$
@@ -392,6 +407,11 @@ cat >"$temp_env" <<EOF
 PI_WEB_UID=$pi_web_uid
 PI_WEB_GID=$pi_web_gid
 DOCKER_GID=$docker_gid
+
+# Detected Docker host profile and host capability toggles.
+PI_WEB_DOCKER_HOST_PROFILE=$pi_web_host_profile
+HOSTEXEC_MODE=$hostexec_mode
+PI_WEB_DOCKER_EXTRA_HOST_PATHS=$pi_web_extra_host_paths_env
 
 # Persistent data and localhost-only default exposure.
 PI_WEB_DOCKER_DATA_DIR=$data_dir
@@ -417,6 +437,16 @@ mv "$temp_env" "$env_file"
 
 log "Wrote Docker assets to $install_dir"
 log "Wrote runtime environment to $env_file"
+log "Wrote host Compose override to $compose_override_file"
+log "Selected PI WEB Docker host profile: $pi_web_host_profile"
+case "$pi_web_host_profile" in
+  linux-native-docker)
+    log "Enabled Linux host mounts and hostexec namespace bridge."
+    ;;
+  mac-docker-desktop)
+    log "Enabled Docker Desktop for Mac project mounts. hostexec is disabled because containers cannot enter native macOS namespaces."
+    ;;
+esac
 log "Persistent PI WEB Docker data: $data_dir"
 log "Custom image hooks: $custom_image_hooks_dir"
 
@@ -443,13 +473,13 @@ log ""
 log "Building $pi_web_image with --pull --no-cache (CACHE_BUST=$cache_bust) ..."
 (
   cd "$install_dir"
-  CACHE_BUST=$cache_bust compose_cmd -f compose.yml build --pull --no-cache
+  CACHE_BUST=$cache_bust run_runtime_compose build --pull --no-cache
 )
 
 log "Recreating split PI WEB Docker services ..."
 (
   cd "$install_dir"
-  compose_cmd -f compose.yml up -d --force-recreate --remove-orphans
+  run_runtime_compose up -d --force-recreate --remove-orphans
 )
 
 log ""
@@ -458,5 +488,5 @@ log "Install directory: $install_dir"
 log "To update later, re-run this installer."
 (
   cd "$install_dir"
-  compose_cmd -f compose.yml ps
+  run_runtime_compose ps
 )

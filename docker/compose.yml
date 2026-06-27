@@ -21,28 +21,13 @@ x-pi-web-environment: &pi-web-environment
   PI_WEB_SESSIOND_SOCKET: /data/pi-web/sessiond.sock
   PI_CODING_AGENT_DIR: /data/pi-agent
   HOSTEXEC_IMAGE: ${HOSTEXEC_IMAGE:-alpine:3.22}
+  HOSTEXEC_MODE: ${HOSTEXEC_MODE:-disabled}
   PI_WEB_MAX_UPLOAD_BYTES: ${PI_WEB_MAX_UPLOAD_BYTES:-67108864}
 
 x-pi-web-volumes: &pi-web-volumes
   - type: bind
     source: ${PI_WEB_DOCKER_DATA_DIR:-./data}
     target: /data
-  - type: bind
-    source: /var/run/docker.sock
-    target: /var/run/docker.sock
-  - type: bind
-    source: /srv
-    target: /srv
-  - type: bind
-    source: /opt
-    target: /opt
-  - type: bind
-    source: /home
-    target: /home
-  - type: bind
-    source: /
-    target: /host
-    read_only: true
 
 services:
   sessiond:
