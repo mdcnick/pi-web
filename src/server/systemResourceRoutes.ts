@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { readFile, statfs } from "node:fs/promises";
 import { cpus, freemem, hostname, loadavg, platform, totalmem, uptime } from "node:os";
 import type { FastifyInstance } from "fastify";
@@ -17,6 +19,8 @@ interface NetworkCounters {
   rxBytes: number;
   txBytes: number;
 }
+
+const execFileAsync = promisify(execFile);
 
 let previousCpu: CpuTimesSnapshot | undefined;
 let previousIo: IoCounters | undefined;
@@ -118,16 +122,36 @@ async function readStorageUsage(): Promise<SystemResourceSnapshot["storage"]> {
 }
 
 async function readMounts(): Promise<{ filesystem: string; mountPoint: string; type: string }[]> {
+  const mounts = platform() === "linux" ? await readLinuxMounts() : await readPortableMounts();
+  const unique = new Map<string, { filesystem: string; mountPoint: string; type: string }>();
+  for (const mount of mounts) unique.set(mount.mountPoint, mount);
+  return [...unique.values()];
+}
+
+async function readLinuxMounts(): Promise<{ filesystem: string; mountPoint: string; type: string }[]> {
   const content = await readFile("/proc/mounts", "utf8");
-  const mounts = content.split("\n").flatMap((line) => {
+  return content.split("\n").flatMap((line) => {
     const [filesystem, mountPoint, type] = line.split(" ");
     if (filesystem === undefined || mountPoint === undefined || type === undefined) return [];
     if (isVirtualFilesystem(type, mountPoint)) return [];
     return [{ filesystem, mountPoint: unescapeMountPath(mountPoint), type }];
   });
-  const unique = new Map<string, { filesystem: string; mountPoint: string; type: string }>();
-  for (const mount of mounts) unique.set(mount.mountPoint, mount);
-  return [...unique.values()];
+}
+
+async function readPortableMounts(): Promise<{ filesystem: string; mountPoint: string; type: string }[]> {
+  try {
+    const { stdout } = await execFileAsync("df", ["-kP"]);
+    return stdout.split("\n").slice(1).flatMap((line) => {
+      const match = /^(\S+)\s+\d+\s+\d+\s+\d+\s+\d+%\s+(.+)$/u.exec(line.trim());
+      if (match === null) return [];
+      const [, filesystem, mountPoint] = match;
+      if (filesystem === undefined || mountPoint === undefined) return [];
+      if (isVirtualFilesystem("", mountPoint)) return [];
+      return [{ filesystem, mountPoint, type: "" }];
+    });
+  } catch {
+    return [];
+  }
 }
 
 function isVirtualFilesystem(type: string, mountPoint: string): boolean {
@@ -163,6 +187,11 @@ function isVirtualBlockDevice(name: string): boolean {
 }
 
 async function readNetworkCounters(): Promise<NetworkCounters> {
+  if (platform() === "linux") return readLinuxNetworkCounters();
+  return readPortableNetworkCounters();
+}
+
+async function readLinuxNetworkCounters(): Promise<NetworkCounters> {
   try {
     const content = await readFile("/proc/net/dev", "utf8");
     return content.split("\n").slice(2).reduce<NetworkCounters>((sum, line) => {
@@ -173,6 +202,25 @@ async function readNetworkCounters(): Promise<NetworkCounters> {
       const rxBytes = Number(parts[0] ?? 0);
       const txBytes = Number(parts[8] ?? 0);
       if (!Number.isFinite(rxBytes) || !Number.isFinite(txBytes)) return sum;
+      return { rxBytes: sum.rxBytes + rxBytes, txBytes: sum.txBytes + txBytes };
+    }, { rxBytes: 0, txBytes: 0 });
+  } catch {
+    return { rxBytes: 0, txBytes: 0 };
+  }
+}
+
+async function readPortableNetworkCounters(): Promise<NetworkCounters> {
+  try {
+    const { stdout } = await execFileAsync("netstat", ["-ibn"]);
+    const seen = new Set<string>();
+    return stdout.split("\n").slice(1).reduce<NetworkCounters>((sum, line) => {
+      const parts = line.trim().split(/\s+/);
+      const iface = parts[0];
+      if (iface === undefined || iface === "" || iface === "lo0" || seen.has(iface)) return sum;
+      const rxBytes = Number(parts[6] ?? 0);
+      const txBytes = Number(parts[9] ?? 0);
+      if (!Number.isFinite(rxBytes) || !Number.isFinite(txBytes)) return sum;
+      seen.add(iface);
       return { rxBytes: sum.rxBytes + rxBytes, txBytes: sum.txBytes + txBytes };
     }, { rxBytes: 0, txBytes: 0 });
   } catch {
