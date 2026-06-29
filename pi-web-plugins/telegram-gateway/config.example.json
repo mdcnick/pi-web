@@ -1,18 +1,22 @@
 {
-  "$schemaComment": "Copy to ~/.pi-web/telegram-gateway/config.json. Prefer TELEGRAM_BOT_TOKEN env var instead of storing a token here.",
-  "telegramBotToken": "",
+  "$schemaComment": "Copy to ~/.pi-web/telegram-gateway/config.json. Each allowed Telegram user row attaches the BotFather token for the bot they use. Keep real tokens out of git.",
   "piWebBaseUrl": "http://127.0.0.1:8504",
   "machineId": "local",
   "defaultCwd": "/absolute/path/to/default/workspace",
   "workspaceAccessPath": "~/.pi-web/workspace-access.json",
-  "allowedTelegramUserIds": [123456789],
-  "adminTelegramUserIds": [123456789],
-  "userRoutes": {
-    "123456789": {
-      "label": "Nick",
-      "cwd": "/absolute/path/to/default/workspace"
+  "sessionBots": [
+    {
+      "id": "friend-session-1",
+      "label": "Friend onboarding bot",
+      "telegramBotToken": "",
+      "telegramUserId": 123456789,
+      "allowedTelegramUserIds": [123456789],
+      "adminTelegramUserIds": [123456789],
+      "cwd": "/absolute/path/to/default/workspace",
+      "sessionId": "optional-existing-pi-web-session-id",
+      "enabled": true
     }
-  },
+  ],
   "statePath": "~/.pi-web/telegram-gateway/state.json",
   "pollTimeoutSeconds": 25,
   "requestTimeoutMs": 30000,

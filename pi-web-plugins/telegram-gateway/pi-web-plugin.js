@@ -1,114 +1,494 @@
-const CONFIG_PATH = "~/.pi-web/telegram-gateway/config.json";
-const PLUGIN_PATH = "~/.pi-web/plugins/telegram-gateway";
-const RUN_COMMAND = `TELEGRAM_BOT_TOKEN=\"paste-token-here\" node ${PLUGIN_PATH}/gateway.mjs --config ${CONFIG_PATH}`;
-
+// Generated from pi-web-plugins/telegram-gateway/pi-web-plugin.ts. Do not edit directly.
+class TelegramGatewayDashboard extends HTMLElement {
+    state = { loading: true, saving: false, discovered: [] };
+    pendingBotToken = "";
+    connectedCallback() {
+        this.attachShadow({ mode: "open" });
+        void this.load();
+    }
+    get workspacePath() {
+        return this.getAttribute("workspace-path") ?? "";
+    }
+    get machineId() {
+        return this.getAttribute("machine-id") ?? "local";
+    }
+    get selectedSessionId() {
+        return this.getAttribute("selected-session-id") ?? "";
+    }
+    async load() {
+        this.state = { ...this.state, loading: true, error: undefined, message: undefined };
+        this.render();
+        try {
+            const value = await api("/api/telegram-gateway");
+            const config = { ...value.config };
+            if (value.exists === false || config.defaultCwd === "")
+                config.defaultCwd = this.workspacePath;
+            if (value.exists === false)
+                config.piWebBaseUrl = window.location.origin;
+            if (config.machineId === "")
+                config.machineId = this.machineId;
+            this.state = { ...this.state, loading: false, settings: { ...value, config } };
+        }
+        catch (error) {
+            this.state = { ...this.state, loading: false, error: formatError(error) };
+        }
+        this.render();
+    }
+    async save(successMessage = "Saved Telegram gateway settings.") {
+        this.captureFormDraft();
+        const body = this.readForm();
+        if (body === undefined)
+            return false;
+        this.state = { ...this.state, saving: true, error: undefined, message: undefined };
+        this.render();
+        try {
+            const value = await api("/api/telegram-gateway", { method: "PUT", body });
+            this.pendingBotToken = "";
+            this.state = { ...this.state, saving: false, settings: value, message: successMessage };
+            this.render();
+            return true;
+        }
+        catch (error) {
+            this.state = { ...this.state, saving: false, error: formatError(error) };
+            this.render();
+            return false;
+        }
+    }
+    async saveBotToken() {
+        await this.save("Saved Telegram user bot tokens/settings.");
+    }
+    async start() {
+        if (!(await this.save()))
+            return;
+        await this.callAction("/api/telegram-gateway/start", "Gateway started.");
+    }
+    async stop() {
+        await this.callAction("/api/telegram-gateway/stop", "Gateway stop requested.");
+    }
+    async testToken(index) {
+        const settings = this.captureFormDraft();
+        const user = settings.config.users[index];
+        if (user === undefined)
+            return;
+        this.state = { ...this.state, saving: true, error: undefined, message: undefined };
+        this.render();
+        try {
+            const value = await api("/api/telegram-gateway/test-token", { method: "POST", body: { token: user.botToken ?? "", botId: user.botId } });
+            const name = value.bot?.username === undefined ? value.bot?.first_name ?? "bot" : `@${value.bot.username}`;
+            this.state = { ...this.state, saving: false, message: `Connected ${user.label ?? user.botLabel ?? "Telegram user"}'s bot to ${name}.` };
+        }
+        catch (error) {
+            this.state = { ...this.state, saving: false, error: formatError(error) };
+        }
+        this.render();
+    }
+    async discoverUsers(index) {
+        const settings = this.captureFormDraft();
+        const user = settings.config.users[index];
+        if (user === undefined)
+            return;
+        this.state = { ...this.state, saving: true, error: undefined, message: undefined };
+        this.render();
+        try {
+            const value = await api("/api/telegram-gateway/discover-users", { method: "POST", body: { token: user.botToken ?? "", botId: user.botId } });
+            const nextSettings = this.currentSettings();
+            const nextUser = nextSettings.config.users[index];
+            const detected = value.users[0];
+            if (nextUser !== undefined && value.users.length === 1 && detected !== undefined) {
+                nextUser.telegramUserId = detected.id;
+                nextUser.label = nextUser.label ?? userLabel(detected);
+            }
+            this.state = {
+                ...this.state,
+                saving: false,
+                settings: nextSettings,
+                discovered: value.users,
+                message: value.users.length === 0 ? "No Telegram users found yet. Open Telegram, send /start to this bot, then click Detect again." : value.users.length === 1 && detected !== undefined ? `Found and filled Telegram user ${userLabel(detected)}.` : `Found ${String(value.users.length)} Telegram users. Copy the right numeric ID into this user row.`,
+            };
+        }
+        catch (error) {
+            this.state = { ...this.state, saving: false, error: formatError(error) };
+        }
+        this.render();
+    }
+    async callAction(path, message) {
+        this.state = { ...this.state, saving: true, error: undefined, message: undefined };
+        this.render();
+        try {
+            const value = await api(path, { method: "POST" });
+            this.state = { ...this.state, saving: false, settings: value, message };
+        }
+        catch (error) {
+            this.state = { ...this.state, saving: false, error: formatError(error) };
+        }
+        this.render();
+    }
+    addUser(user) {
+        const settings = this.captureFormDraft();
+        const id = user?.id ?? 0;
+        const label = user === undefined ? "" : userLabel(user);
+        settings.config.users = [...settings.config.users, { telegramUserId: id, label, botId: randomBotId(), botLabel: label || `Telegram user ${String(settings.config.users.length + 1)} bot`, cwd: this.workspacePath || settings.config.defaultCwd, sessionId: this.selectedSessionId || undefined, admin: settings.config.users.length === 0, enabled: true }];
+        this.state = { ...this.state, settings, message: undefined, error: undefined };
+        this.render();
+    }
+    removeUser(index) {
+        const settings = this.captureFormDraft();
+        settings.config.users = settings.config.users.filter((_user, userIndex) => userIndex !== index);
+        this.state = { ...this.state, settings };
+        this.render();
+    }
+    addCurrentWorkspaceToUser(index) {
+        const input = this.shadowRoot?.getElementById(`user-cwd-${String(index)}`);
+        if (input instanceof HTMLInputElement && this.workspacePath !== "")
+            input.value = this.workspacePath;
+    }
+    addSelectedSessionToUser(index) {
+        const input = this.shadowRoot?.getElementById(`user-session-${String(index)}`);
+        if (input instanceof HTMLInputElement && this.selectedSessionId !== "")
+            input.value = this.selectedSessionId;
+    }
+    currentSettings() {
+        const existing = this.state.settings;
+        if (existing !== undefined)
+            return clone(existing);
+        return {
+            path: "~/.pi-web/telegram-gateway/config.json",
+            exists: false,
+            tokenConfigured: false,
+            config: {
+                piWebBaseUrl: window.location.origin,
+                machineId: this.machineId,
+                defaultCwd: this.workspacePath,
+                workspaceAccessPath: "",
+                statePath: "~/.pi-web/telegram-gateway/state.json",
+                users: [],
+            },
+            process: { running: false, logs: [] },
+        };
+    }
+    captureFormDraft() {
+        const settings = this.currentSettings();
+        if (this.shadowRoot === null)
+            return settings;
+        const tokenInput = this.shadowRoot.getElementById("bot-token");
+        if (tokenInput instanceof HTMLInputElement)
+            this.pendingBotToken = tokenInput.value.trim();
+        const assignInput = (id, assign) => {
+            const input = this.shadowRoot?.getElementById(id);
+            if (input instanceof HTMLInputElement)
+                assign(input.value);
+        };
+        assignInput("piweb-base-url", (value) => { settings.config.piWebBaseUrl = value; });
+        assignInput("machine-id", (value) => { settings.config.machineId = value; });
+        assignInput("default-cwd", (value) => { settings.config.defaultCwd = value; });
+        assignInput("workspace-access-path", (value) => { settings.config.workspaceAccessPath = value; });
+        assignInput("state-path", (value) => { settings.config.statePath = value; });
+        if (this.shadowRoot.getElementById("add-user") !== null) {
+            const rows = [...this.shadowRoot.querySelectorAll("[data-user-row]")];
+            settings.config.users = rows.flatMap((row) => {
+                if (!(row instanceof HTMLElement))
+                    return [];
+                const idText = inputValue(row, "telegram-user-id").trim();
+                const id = Number(idText);
+                return [{
+                        telegramUserId: Number.isInteger(id) && id > 0 ? id : 0,
+                        label: inputValue(row, "telegram-user-label").trim() || undefined,
+                        cwd: inputValue(row, "telegram-user-cwd").trim() || undefined,
+                        sessionId: inputValue(row, "telegram-user-session").trim() || undefined,
+                        admin: checkboxValue(row, "telegram-user-admin"),
+                        botId: inputValue(row, "telegram-bot-id").trim() || randomBotId(),
+                        botLabel: inputValue(row, "telegram-bot-label").trim() || undefined,
+                        botToken: inputValue(row, "telegram-bot-token").trim() || undefined,
+                        botTokenConfigured: row.getAttribute("data-bot-token-configured") === "true",
+                        enabled: checkboxValue(row, "telegram-bot-enabled"),
+                    }];
+            });
+        }
+        this.state = { ...this.state, settings };
+        return settings;
+    }
+    readForm() {
+        const defaultCwd = inputValue(this.shadowRoot, "default-cwd").trim();
+        if (defaultCwd === "" || !defaultCwd.startsWith("/")) {
+            this.state = { ...this.state, error: "Default workspace path must be absolute." };
+            this.render();
+            return undefined;
+        }
+        const rows = [...(this.shadowRoot?.querySelectorAll("[data-user-row]") ?? [])];
+        const users = [];
+        for (const [index, row] of rows.entries()) {
+            if (!(row instanceof HTMLElement))
+                continue;
+            const idText = inputValue(row, "telegram-user-id").trim();
+            const id = idText === "" ? 0 : Number(idText);
+            if (!Number.isInteger(id) || id < 0) {
+                this.state = { ...this.state, error: `Telegram user ${String(index + 1)} needs a numeric Telegram ID, or leave it blank until you detect it.` };
+                this.render();
+                return undefined;
+            }
+            const cwd = inputValue(row, "telegram-user-cwd").trim() || defaultCwd;
+            if (!cwd.startsWith("/")) {
+                this.state = { ...this.state, error: `Workspace path for Telegram ID ${String(id)} must be absolute.` };
+                this.render();
+                return undefined;
+            }
+            users.push({
+                telegramUserId: id,
+                label: inputValue(row, "telegram-user-label").trim() || undefined,
+                cwd,
+                sessionId: inputValue(row, "telegram-user-session").trim() || undefined,
+                admin: checkboxValue(row, "telegram-user-admin"),
+                botId: inputValue(row, "telegram-bot-id").trim() || randomBotId(),
+                botLabel: inputValue(row, "telegram-bot-label").trim() || undefined,
+                botToken: inputValue(row, "telegram-bot-token").trim() || undefined,
+                enabled: checkboxValue(row, "telegram-bot-enabled"),
+            });
+        }
+        return {
+            telegramBotToken: inputValue(this.shadowRoot, "bot-token").trim(),
+            piWebBaseUrl: inputValue(this.shadowRoot, "piweb-base-url").trim() || "http://127.0.0.1:8504",
+            machineId: inputValue(this.shadowRoot, "machine-id").trim() || "local",
+            defaultCwd,
+            workspaceAccessPath: inputValue(this.shadowRoot, "workspace-access-path").trim(),
+            statePath: inputValue(this.shadowRoot, "state-path").trim() || "~/.pi-web/telegram-gateway/state.json",
+            users,
+        };
+    }
+    render() {
+        if (this.shadowRoot === null)
+            return;
+        const settings = this.currentSettings();
+        const process = settings.process;
+        this.shadowRoot.innerHTML = `
+      <style>
+        :host { display:block; color:var(--pi-text, #e5e7eb); }
+        .wrap { display:grid; gap:14px; padding:2px; }
+        .card { border:1px solid var(--pi-border, #374151); border-radius:12px; background:var(--pi-surface, #111827); padding:14px; }
+        .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+        .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+        .user { display:grid; gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid var(--pi-border, #374151); }
+        button { border:1px solid var(--pi-border, #374151); border-radius:8px; background:var(--pi-surface-hover, #1f2937); color:inherit; padding:7px 10px; cursor:pointer; }
+        button.primary { border-color:var(--pi-accent-border, #60a5fa); color:var(--pi-accent, #93c5fd); }
+        button.danger { border-color:var(--pi-danger, #ef4444); color:var(--pi-danger, #f87171); }
+        button:disabled { opacity:.55; cursor:not-allowed; }
+        input { width:100%; box-sizing:border-box; border:1px solid var(--pi-border, #374151); border-radius:8px; background:var(--pi-bg, #030712); color:inherit; padding:8px; }
+        label { display:grid; gap:5px; font-size:12px; color:var(--pi-text-secondary, #9ca3af); }
+        code { color:var(--pi-accent, #93c5fd); }
+        pre { white-space:pre-wrap; max-height:180px; overflow:auto; }
+        .muted { color:var(--pi-text-secondary, #9ca3af); }
+        .error { border-color:var(--pi-danger, #ef4444); color:var(--pi-danger, #f87171); }
+        .ok { color:var(--pi-success, #34d399); }
+        .pill { border:1px solid var(--pi-border, #374151); border-radius:999px; padding:2px 8px; }
+        @media (max-width: 820px) { .grid { grid-template-columns:1fr; } }
+      </style>
+      <div class="wrap">
+        <div class="card">
+          <div class="row">
+            <strong>Telegram Gateway</strong>
+            <span class="pill ${process.running ? "ok" : "muted"}">${process.running ? `running${process.pid === undefined ? "" : ` · pid ${String(process.pid)}`}` : "stopped"}</span>
+            <span class="pill ${settings.tokenConfigured ? "ok" : "muted"}">${settings.tokenConfigured ? "bot token saved" : "bot token needed"}</span>
+            ${this.state.saving ? `<span class="muted">working…</span>` : ""}
+          </div>
+          <p class="muted">Config file: <code>${escapeHtml(settings.path)}</code> · ${settings.exists ? "exists" : "will be created on save"}</p>
+          <p class="muted">Current workspace: <code>${escapeHtml(this.workspacePath)}</code></p>
+          ${this.state.error === undefined ? "" : `<p class="card error">${escapeHtml(this.state.error)}</p>`}
+          ${this.state.message === undefined ? "" : `<p class="card ok">${escapeHtml(this.state.message)}</p>`}
+          <div class="row">
+            <button id="refresh">Refresh</button>
+            <button id="save" class="primary">Save all settings</button>
+            <button id="start" class="primary">Save & start gateway</button>
+            <button id="stop" class="danger">Stop gateway</button>
+          </div>
+        </div>
+        ${this.state.loading ? `<p class="muted">Loading…</p>` : `
+          <div class="card">
+            <h3>1. Gateway settings</h3>
+            <div class="grid">
+              <label>PI WEB base URL<input id="piweb-base-url" value="${escapeAttr(settings.config.piWebBaseUrl)}" /></label>
+              <label>Machine ID<input id="machine-id" value="${escapeAttr(settings.config.machineId || this.machineId)}" /></label>
+              <label>Default workspace<input id="default-cwd" value="${escapeAttr(settings.config.defaultCwd || this.workspacePath)}" /></label>
+              <label>State file<input id="state-path" value="${escapeAttr(settings.config.statePath)}" /></label>
+            </div>
+            <label style="margin-top:10px">Advanced / optional workspace access map <span class="muted">dashboard auth is separate; leave this blank unless you intentionally want shared workspace ACLs</span><input id="workspace-access-path" value="${escapeAttr(settings.config.workspaceAccessPath)}" placeholder="~/.pi-web/workspace-access.json" /></label>
+          </div>
+          <div class="card">
+            <div class="row"><h3 style="margin-right:auto">2. Allowed Telegram users</h3><button id="add-user" class="primary">Add Telegram user</button></div>
+            <p class="muted">Each row is an actual Telegram user. Add their numeric Telegram ID, then attach the BotFather token for whichever bot that user/session should use. The dashboard/admin auth is separate; this list is just the Telegram gateway allowlist and bot-token routing.</p>
+            ${settings.config.users.length === 0 ? `<p class="muted">No Telegram users yet. Add a user, paste the bot token for their bot, then have them send /start to that bot and click Detect.</p>` : settings.config.users.map((user, index) => this.renderUser(user, index)).join("")}
+            <div class="row" style="margin-top:10px"><button id="save-users" class="primary">Save Telegram users/settings</button><button id="start-users" class="primary">Save & start gateway</button></div>
+            ${this.renderDiscoveredUsers()}
+          </div>
+          <div class="card">
+            <h3>Gateway logs</h3>
+            ${process.lastExit === undefined ? "" : `<p class="muted">Last exit: code=${String(process.lastExit.code)} signal=${String(process.lastExit.signal)} at ${escapeHtml(process.lastExit.at)}</p>`}
+            ${process.lastError === undefined ? "" : `<p class="error">${escapeHtml(process.lastError)}</p>`}
+            <pre><code>${escapeHtml(process.logs.join("\n") || "No gateway output yet.")}</code></pre>
+          </div>
+        `}
+      </div>
+    `;
+        this.bindEvents();
+    }
+    renderDiscoveredUsers() {
+        if (this.state.discovered.length === 0)
+            return "";
+        return `
+      <div style="margin-top:10px" class="row">
+        ${this.state.discovered.map((user) => `<button data-add-discovered="${String(user.id)}">Add ${escapeHtml(userLabel(user))} <code>${String(user.id)}</code></button>`).join("")}
+      </div>
+    `;
+    }
+    renderUser(user, index) {
+        const title = user.label || user.botLabel || `Telegram user ${String(index + 1)}`;
+        return `
+      <div class="user" data-user-row data-bot-token-configured="${user.botTokenConfigured === true ? "true" : "false"}">
+        <div class="row"><strong>${escapeHtml(title)}</strong><span class="pill ${user.botTokenConfigured === true ? "ok" : "muted"}">${user.botTokenConfigured === true ? "token saved" : "token needed"}</span><button data-remove-user="${String(index)}" class="danger">Remove</button></div>
+        <input data-field="telegram-bot-id" type="hidden" value="${escapeAttr(user.botId ?? randomBotId())}" />
+        <div class="grid">
+          <label>Telegram user label<input data-field="telegram-user-label" value="${escapeAttr(user.label ?? "")}" placeholder="Nick / Alice / Bob" /></label>
+          <label>Telegram numeric ID<input data-field="telegram-user-id" value="${user.telegramUserId === 0 ? "" : String(user.telegramUserId)}" inputmode="numeric" placeholder="Click Detect after they send /start" /></label>
+          <label>BotFather token for this user's bot<input data-field="telegram-bot-token" type="password" autocomplete="off" value="${escapeAttr(user.botToken ?? "")}" placeholder="${user.botTokenConfigured === true ? "Saved — paste a new token only to replace it" : "123456:ABC..."}" /></label>
+          <label>Bot label <span class="muted">optional</span><input data-field="telegram-bot-label" value="${escapeAttr(user.botLabel ?? user.label ?? "")}" placeholder="Will onboarding bot / Customer A" /></label>
+          <label>Workspace path<input id="user-cwd-${String(index)}" data-field="telegram-user-cwd" value="${escapeAttr(user.cwd || this.workspacePath)}" /></label>
+          <label>PI WEB session ID <span class="muted">existing session this user/bot should talk to</span><input id="user-session-${String(index)}" data-field="telegram-user-session" value="${escapeAttr(user.sessionId ?? "")}" placeholder="019f..." /></label>
+          <label class="row" style="align-content:end"><input data-field="telegram-user-admin" type="checkbox" ${user.admin === true ? "checked" : ""} style="width:auto" /> Telegram admin commands (/setcwd)</label>
+          <label class="row" style="align-content:end"><input data-field="telegram-bot-enabled" type="checkbox" ${user.enabled === false ? "" : "checked"} style="width:auto" /> Enabled</label>
+        </div>
+        <div class="row"><button data-test-user-bot="${String(index)}">Test attached bot token</button><button data-detect-user-bot="${String(index)}">Detect this user's ID from /start</button><button data-current-workspace="${String(index)}">Use current workspace</button><button data-selected-session="${String(index)}" ${this.selectedSessionId === "" ? "disabled" : ""}>Use selected session</button></div>
+      </div>
+    `;
+    }
+    bindEvents() {
+        this.shadowRoot?.getElementById("refresh")?.addEventListener("click", () => { void this.load(); });
+        this.shadowRoot?.getElementById("save")?.addEventListener("click", () => { void this.save(); });
+        this.shadowRoot?.getElementById("start")?.addEventListener("click", () => { void this.start(); });
+        this.shadowRoot?.getElementById("stop")?.addEventListener("click", () => { void this.stop(); });
+        this.shadowRoot?.getElementById("save-token")?.addEventListener("click", () => { void this.saveBotToken(); });
+        this.shadowRoot?.getElementById("save-users")?.addEventListener("click", () => { void this.save(); });
+        this.shadowRoot?.getElementById("start-users")?.addEventListener("click", () => { void this.start(); });
+        this.shadowRoot?.getElementById("add-user")?.addEventListener("click", () => this.addUser());
+        for (const button of this.shadowRoot?.querySelectorAll("[data-remove-user]") ?? []) {
+            button.addEventListener("click", () => this.removeUser(Number(button.getAttribute("data-remove-user"))));
+        }
+        for (const button of this.shadowRoot?.querySelectorAll("[data-test-user-bot]") ?? []) {
+            button.addEventListener("click", () => { void this.testToken(Number(button.getAttribute("data-test-user-bot"))); });
+        }
+        for (const button of this.shadowRoot?.querySelectorAll("[data-detect-user-bot]") ?? []) {
+            button.addEventListener("click", () => { void this.discoverUsers(Number(button.getAttribute("data-detect-user-bot"))); });
+        }
+        for (const button of this.shadowRoot?.querySelectorAll("[data-current-workspace]") ?? []) {
+            button.addEventListener("click", () => this.addCurrentWorkspaceToUser(Number(button.getAttribute("data-current-workspace"))));
+        }
+        for (const button of this.shadowRoot?.querySelectorAll("[data-selected-session]") ?? []) {
+            button.addEventListener("click", () => this.addSelectedSessionToUser(Number(button.getAttribute("data-selected-session"))));
+        }
+        for (const button of this.shadowRoot?.querySelectorAll("[data-add-discovered]") ?? []) {
+            button.addEventListener("click", () => {
+                const id = Number(button.getAttribute("data-add-discovered"));
+                const user = this.state.discovered.find((candidate) => candidate.id === id);
+                this.addUser(user);
+            });
+        }
+    }
+}
+async function api(path, options = {}) {
+    const init = { method: options.method ?? "GET", cache: "no-store" };
+    if (options.body !== undefined) {
+        init.headers = { "content-type": "application/json" };
+        init.body = JSON.stringify(options.body);
+    }
+    const response = await fetch(path, init);
+    const value = await response.json();
+    if (!response.ok)
+        throw new Error(value.error ?? `HTTP ${String(response.status)}`);
+    return value;
+}
+function inputValue(root, idOrField) {
+    const byId = root?.querySelector(`#${CSS.escape(idOrField)}`);
+    const byField = root?.querySelector(`[data-field="${cssString(idOrField)}"]`);
+    const input = byId ?? byField;
+    return input instanceof HTMLInputElement ? input.value : "";
+}
+function checkboxValue(root, field) {
+    const input = root?.querySelector(`[data-field="${cssString(field)}"]`);
+    return input instanceof HTMLInputElement && input.checked;
+}
+function clone(value) {
+    return JSON.parse(JSON.stringify(value));
+}
+function userLabel(user) {
+    const handle = user.username === undefined ? "" : `@${user.username}`;
+    const name = [user.first_name, user.last_name].filter((part) => part !== undefined && part !== "").join(" ");
+    return handle || name || String(user.id);
+}
+function selectedSessionId(session) {
+    if (typeof session !== "object" || session === null || !("id" in session))
+        return "";
+    const id = session.id;
+    return typeof id === "string" ? id : "";
+}
+function randomBotId() {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto)
+        return `bot-${crypto.randomUUID()}`;
+    return `bot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+function cssString(value) {
+    return CSS.escape(value).replaceAll('"', '\\"');
+}
+function escapeHtml(value) {
+    return value.replace(/[&<>"]/gu, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char] ?? char);
+}
+function escapeAttr(value) {
+    return escapeHtml(value).replace(/'/gu, "&#39;");
+}
+function formatError(error) {
+    return error instanceof Error ? error.message : String(error);
+}
+if (!customElements.get("telegram-gateway-dashboard")) {
+    customElements.define("telegram-gateway-dashboard", TelegramGatewayDashboard);
+}
 const plugin = {
-  apiVersion: 1,
-  name: "Telegram Gateway",
-  activate: ({ html, svg }) => ({
-    contributions: {
-      actions: [
-        {
-          id: "gateway.open",
-          title: "Open Telegram Gateway Panel",
-          description: "Show setup and launch commands for the Telegram-to-PI-WEB gateway.",
-          group: "Integrations",
-          enabled: (context) => context.state.selectedWorkspace !== undefined,
-          run: (context) => context.selectWorkspaceTool("telegram-gateway:workspace.telegram"),
-        },
-        {
-          id: "gateway.terminal",
-          title: "Open Terminal for Telegram Gateway",
-          description: "Open the workspace terminal; the Telegram panel contains the copyable run command.",
-          group: "Integrations",
-          enabled: (context) => context.state.selectedWorkspace !== undefined,
-          run: (context) => {
-            context.selectWorkspaceTool("telegram-gateway:workspace.telegram");
-            context.openTerminal();
-          },
-        },
-      ],
-      workspaceLabels: [
-        {
-          id: "telegram-label",
-          order: 90,
-          items: () => [{ type: "text", text: "telegram", title: "Telegram Gateway plugin available" }],
-        },
-      ],
-      workspacePanels: [
-        {
-          id: "workspace.telegram",
-          title: "Telegram",
-          order: 320,
-          icon: svg`
+    apiVersion: 1,
+    name: "Telegram Gateway",
+    activate: ({ html, svg }) => ({
+        contributions: {
+            actions: [
+                {
+                    id: "gateway.open",
+                    title: "Open Telegram Gateway Panel",
+                    description: "Configure and run the Telegram-to-PI-WEB gateway from the browser.",
+                    group: "Integrations",
+                    enabled: (context) => context.state.selectedWorkspace !== undefined,
+                    run: (context) => { context.selectWorkspaceTool("telegram-gateway:workspace.telegram"); },
+                },
+            ],
+            workspaceLabels: [
+                {
+                    id: "telegram-label",
+                    order: 90,
+                    items: () => [{ type: "text", text: "telegram", title: "Telegram Gateway plugin available" }],
+                },
+            ],
+            workspacePanels: [
+                {
+                    id: "workspace.telegram",
+                    title: "Telegram",
+                    order: 320,
+                    icon: svg `
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 3 10 14"></path>
               <path d="m21 3-7 18-4-7-7-4 18-7Z"></path>
             </svg>
           `,
-          render: ({ workspace, terminal }) => html`
+                    render: ({ workspace, machine, state }) => html `
             <section class="toolbar"><strong>Telegram Gateway</strong></section>
             <section class="viewer">
-              <p>
-                Bridge trusted Telegram users into isolated PI WEB sessions with the dependency-free
-                <code>gateway.mjs</code> long-polling service.
-              </p>
-              <p class="muted">
-                Current workspace: <code>${workspace.path}</code>
-              </p>
-
-              <h3>Fast path: run the setup wizard</h3>
-              <pre><code>node /home/nick/code/pi-web-vigilante/pi-web-plugins/telegram-gateway/setup.mjs</code></pre>
-              <p class="muted">
-                The wizard verifies your BotFather token, detects your Telegram user ID after you send <code>/start</code>,
-                writes config, and can install the plugin symlink.
-              </p>
-
-              <h3>Manual 1. Install this plugin locally</h3>
-              <pre><code>mkdir -p ~/.pi-web/plugins
-ln -s /path/to/pi-web-plugins/telegram-gateway ~/.pi-web/plugins/telegram-gateway</code></pre>
-
-              <h3>Manual 2. Create config</h3>
-              <pre><code>mkdir -p ~/.pi-web/telegram-gateway
-cp ${PLUGIN_PATH}/config.example.json ${CONFIG_PATH}
-$EDITOR ${CONFIG_PATH}</code></pre>
-              <p class="muted">
-                Set <code>defaultCwd</code> or a per-user route to <code>${workspace.path}</code>, add Telegram numeric user IDs,
-                and keep your bot token out of git.
-              </p>
-
-              <h3>Manual 3. Run the gateway</h3>
-              <pre><code>${RUN_COMMAND}</code></pre>
-              <p>
-                <button @click=${() => terminal.runCommand({
-                  title: "Run Telegram Gateway",
-                  command: RUN_COMMAND,
-                  open: true,
-                  metadata: { "telegram-gateway.task": "run" },
-                })}>Open terminal with run command</button>
-              </p>
-
-              <h3>Telegram commands</h3>
-              <ul>
-                <li><code>/start</code>, <code>/help</code> — show usage.</li>
-                <li><code>/status</code> — show workspace and active PI session.</li>
-                <li><code>/new</code> — create a fresh isolated session for that chat.</li>
-                <li><code>/setcwd /absolute/path</code> — admin-only workspace routing.</li>
-              </ul>
-
-              <h3>Security checklist</h3>
-              <ul>
-                <li>Use <code>TELEGRAM_BOT_TOKEN</code> or an env file, not a committed token.</li>
-                <li>Keep <code>allowedTelegramUserIds</code> tight; unknown users are denied.</li>
-                <li>Give non-technical friends a safe workspace/profile with limited repo scope.</li>
-                <li>Run over private PI WEB/Tailscale/localhost; no public webhook is needed.</li>
-              </ul>
+              <telegram-gateway-dashboard workspace-path=${workspace.path} machine-id=${machine.id} selected-session-id=${selectedSessionId(state?.selectedSession)}></telegram-gateway-dashboard>
             </section>
           `,
+                },
+            ],
         },
-      ],
-    },
-  }),
+    }),
 };
-
 export default plugin;

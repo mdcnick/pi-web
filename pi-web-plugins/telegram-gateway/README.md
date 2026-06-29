@@ -12,8 +12,10 @@ Long polling is intentional: your PI WEB can stay private on `127.0.0.1`, Tailsc
 ## Security model
 
 - Deny-by-default Telegram user allowlist.
-- One private PI session per Telegram user/chat by default.
-- Bot token is preferably supplied via `TELEGRAM_BOT_TOKEN`, not committed to disk.
+- One private PI session per allowed Telegram user/bot link by default.
+- Preferred model: add the actual Telegram user's numeric ID, then attach the BotFather token for whichever bot that user/session should use.
+- Dashboard/admin auth is separate; the Telegram Gateway allowlist is not the dashboard login system.
+- Legacy single-bot mode still works with `TELEGRAM_BOT_TOKEN`, but the in-app UI is optimized for per-user bot-token routing.
 - The gateway talks to PI WEB's normal local API; it does not expose a public HTTP server.
 - `/setcwd` is admin-only because it controls which workspace future sessions start in.
 
@@ -47,15 +49,22 @@ $EDITOR ~/.pi-web/telegram-gateway/config.json
 Set:
 
 - `piWebBaseUrl`: your PI WEB web/API URL, usually `http://127.0.0.1:8504`.
-- `defaultCwd`: absolute workspace path used for users without a route.
-- `allowedTelegramUserIds`: numeric Telegram user IDs allowed to use the bot.
-- optional `userRoutes.<telegramUserId>.cwd`: per-friend workspace path.
+- `defaultCwd`: fallback absolute workspace path.
+- `sessionBots[]`: internal config rows for allowed Telegram users and their attached bot tokens.
+  - `allowedTelegramUserIds`: the actual numeric Telegram user IDs allowed through that row.
+  - `telegramBotToken`: the BotFather token for the bot that user/session should use.
+  - `cwd`: workspace path for that user/session.
+  - `sessionId`: optional existing PI WEB session ID; leave blank to let the gateway create/remember one.
 
-Create a bot with BotFather, then run with the token in the environment:
+Telegram-bound sessions are automatically protected: the gateway locks, pins, makes permanent, and blocks terminal access for configured/remembered session IDs when it starts or reloads, and again before forwarding user prompts.
+
+Start one gateway process; it polls all configured user/bot rows and watches the config for changes, so adding another Telegram user/bot in the UI does not require manually restarting the gateway:
 
 ```bash
-TELEGRAM_BOT_TOKEN='123:abc' node ~/.pi-web/plugins/telegram-gateway/gateway.mjs --config ~/.pi-web/telegram-gateway/config.json
+node ~/.pi-web/plugins/telegram-gateway/gateway.mjs --config ~/.pi-web/telegram-gateway/config.json
 ```
+
+Legacy single-bot mode still works if you set top-level `allowedTelegramUserIds` and run with `TELEGRAM_BOT_TOKEN='123:abc'`.
 
 ## Shared workspace auth
 
@@ -73,7 +82,7 @@ Then set this in `~/.pi-web/telegram-gateway/config.json`:
 "workspaceAccessPath": "~/.pi-web/workspace-access.json"
 ```
 
-Telegram users listed under a Clerk user record's `telegramUserIds` inherit that user's allowed `workspaces`.
+Telegram users listed under a Clerk user record's `telegramUserIds` inherit that user's allowed `workspaces`. This is optional/advanced; the basic Telegram Gateway UI can simply allow a Telegram numeric ID and attach that user's bot token without using the dashboard auth file.
 
 ## Telegram commands
 
@@ -93,7 +102,6 @@ After=network-online.target
 
 [Service]
 Type=simple
-Environment=TELEGRAM_BOT_TOKEN=replace-with-token-or-use-env-file
 ExecStart=/usr/bin/node %h/.pi-web/plugins/telegram-gateway/gateway.mjs --config %h/.pi-web/telegram-gateway/config.json
 Restart=on-failure
 RestartSec=5
@@ -102,7 +110,7 @@ RestartSec=5
 WantedBy=default.target
 ```
 
-Prefer `EnvironmentFile=%h/.config/pi-web-telegram-gateway.env` for real secrets.
+If you intentionally use legacy single-bot mode, add `EnvironmentFile=%h/.config/pi-web-telegram-gateway.env` with `TELEGRAM_BOT_TOKEN=...`. For the normal per-user bot-token model, tokens live in the private `~/.pi-web/telegram-gateway/config.json` file written with mode `0600`.
 
 ## Notes for publishing
 

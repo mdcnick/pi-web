@@ -27,6 +27,7 @@ import { proxyMachinePluginAsset, registerMachinePluginProxyRoutes } from "./mac
 import { WorkspaceAccessController, workspaceAccessErrorStatus } from "./workspaceAccessPolicy.js";
 import { registerWorkspaceAccessRoutes } from "./workspaceAccessRoutes.js";
 import { registerJarvisRoutes } from "./jarvisRoutes.js";
+import { registerTelegramGatewayRoutes } from "./telegramGatewayRoutes.js";
 import { registerSystemResourceRoutes } from "./systemResourceRoutes.js";
 import type { Project } from "./types.js";
 
@@ -167,6 +168,7 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
   app.get("/api/plugins", async () => piWebPlugins.plugins());
   registerWorkspaceAccessRoutes(app, workspaceAccess);
   registerJarvisRoutes(app, { projects, workspaces, sessionDaemon, workspaceAccess });
+  registerTelegramGatewayRoutes(app, { workspaceAccess });
   registerConfigRoutes(app, deps.config);
 
   registerMachineRoutes(app, machines);
