@@ -37,7 +37,7 @@ async function deleteWorkspace(projects: ProjectService, workspaces: WorkspaceSe
     workspaceId: commandWorkspace.id,
     cwd: commandWorkspace.path,
     title: `Delete workspace: ${workspaceLabel(targetWorkspace)}`,
-    command: `git worktree remove ${shellQuote(targetWorkspace.path)}`,
+    command: `git worktree remove ${shellQuote(targetWorkspace.gitWorktreeRoot ?? targetWorkspace.path)}`,
     metadata: workspaceDeletionMetadata(targetWorkspace),
   });
   if (deleteResponse.statusCode < 200 || deleteResponse.statusCode >= 300) throw new Error(`Failed to start workspace deletion: ${responseError(deleteResponse.body, deleteResponse.statusCode)}`);

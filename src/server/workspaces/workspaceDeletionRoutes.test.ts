@@ -80,6 +80,39 @@ describe("workspace deletion routes", () => {
     ]);
   });
 
+  it("removes the Git worktree root when the workspace path is a project subdirectory", async () => {
+    await app.close();
+    app = Fastify({ logger: false });
+    daemonRequests = [];
+    const nestedMain = { ...mainWorkspace, path: "/repo/apps/site", gitWorktreeRoot: "/repo" };
+    const nestedTarget = { ...targetWorkspace, path: "/repo-feature/apps/site", gitWorktreeRoot: "/repo-feature" };
+    registerWorkspaceDeletionRoutes(app, fakeProjects(), fakeWorkspaces([nestedMain, nestedTarget]), fakeDaemon(), "/api");
+
+    const response = await app.inject({ method: "DELETE", url: "/api/projects/p1/workspaces/feature" });
+
+    expect(response.statusCode).toBe(200);
+    expect(daemonRequests).toEqual([
+      { method: "DELETE", path: `/terminals?cwd=${encodeURIComponent(nestedTarget.path)}` },
+      {
+        method: "POST",
+        path: "/terminal-command-runs",
+        body: {
+          origin: "core",
+          projectId: "p1",
+          workspaceId: "main",
+          cwd: "/repo/apps/site",
+          title: "Delete workspace: feature/branch",
+          command: "git worktree remove '/repo-feature'",
+          metadata: {
+            "pi.operation": "workspace.delete",
+            "target.workspaceId": "feature",
+            "target.workspacePath": "/repo-feature/apps/site",
+          },
+        },
+      },
+    ]);
+  });
+
   it("does not start deletion when terminal cleanup fails", async () => {
     closeStatusCode = 500;
 

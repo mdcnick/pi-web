@@ -156,6 +156,7 @@ export interface Workspace {
   isMain: boolean;
   isGitRepo: boolean;
   isGitWorktree: boolean;
+  gitWorktreeRoot?: string;
 }
 
 export interface SessionRef {

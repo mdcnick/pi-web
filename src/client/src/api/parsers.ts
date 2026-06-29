@@ -204,6 +204,7 @@ export function parseProject(value: unknown): Project {
 export function parseWorkspace(value: unknown): Workspace {
   const record = requireRecord(value);
   const branch = optionalString(record, "branch");
+  const gitWorktreeRoot = optionalString(record, "gitWorktreeRoot");
   return {
     id: requireString(record, "id"),
     projectId: requireString(record, "projectId"),
@@ -213,6 +214,7 @@ export function parseWorkspace(value: unknown): Workspace {
     isMain: requireBoolean(record, "isMain"),
     isGitRepo: requireBoolean(record, "isGitRepo"),
     isGitWorktree: requireBoolean(record, "isGitWorktree"),
+    ...(gitWorktreeRoot === undefined ? {} : { gitWorktreeRoot }),
   };
 }
 

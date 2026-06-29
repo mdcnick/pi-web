@@ -20,6 +20,16 @@ export async function isGitRepository(path: string): Promise<boolean> {
   }
 }
 
+export async function gitTopLevel(path: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync("git", ["-C", path, "rev-parse", "--show-toplevel"], { env: sanitizedGitEnv() });
+    const topLevel = stdout.trim();
+    return topLevel === "" ? undefined : topLevel;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function discoverGitWorktrees(path: string): Promise<GitWorktreeInfo[]> {
   const { stdout } = await execFileAsync("git", ["-C", path, "worktree", "list", "--porcelain"], { env: sanitizedGitEnv() });
   const chunks = stdout.trim().split(/\n\s*\n/).filter(Boolean);
