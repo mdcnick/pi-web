@@ -85,6 +85,15 @@ describe("session API compatibility", () => {
 });
 
 describe("machine-scoped terminal command-run API", () => {
+  it("lists workspaces through the selected machine scope", async () => {
+    const fetchMock = stubJsonFetch([workspace]);
+
+    await workspacesApi.workspaces("p 1", "remote a");
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchCall(fetchMock, 0)[0]).toBe("/api/machines/remote%20a/projects/p%201/workspaces");
+  });
+
   it("deletes workspaces through the selected machine scope", async () => {
     const fetchMock = stubJsonFetch(commandRun);
 

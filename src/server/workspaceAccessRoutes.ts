@@ -10,7 +10,7 @@ export interface WorkspaceAccessSettingsResponse {
 
 export interface WorkspaceAccessPublicResponse {
   enabled: boolean;
-  publishableKey?: string;
+  internalAuth?: boolean;
 }
 
 export function registerWorkspaceAccessRoutes(app: FastifyInstance, workspaceAccess: WorkspaceAccessController): void {
@@ -48,9 +48,9 @@ function workspaceAccessSettings(workspaceAccess: WorkspaceAccessController): Wo
 }
 
 function workspaceAccessPublicSettings(workspaceAccess: WorkspaceAccessController): WorkspaceAccessPublicResponse {
-  const publishableKey = workspaceAccess.clerkPublishableKey();
+  const internalAuth = workspaceAccess.hasInternalAuth();
   return {
     enabled: workspaceAccess.isEnabled(),
-    ...(publishableKey === undefined ? {} : { publishableKey }),
+    ...(internalAuth ? { internalAuth } : {}),
   };
 }
