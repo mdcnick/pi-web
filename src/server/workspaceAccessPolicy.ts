@@ -1,8 +1,8 @@
-import { timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import type { FastifyRequest } from "fastify";
+import { createWorkspaceAuthProvider, type WorkspaceAuthProvider, type WorkspaceAuthProviderKind, type WorkspaceAuthPublicSettings } from "./auth/workspaceAuthProvider.js";
 import { cwdPathsEqual, normalizeRequestCwd } from "./workingDirectory.js";
 
 declare module "fastify" {
@@ -42,16 +42,42 @@ export class WorkspaceAccessController {
   private readonly enabled: boolean;
   private readonly path: string;
   private readonly trustAuthHeaders: boolean;
-  private readonly internalAuth: InternalAdminAuth | undefined;
+  private readonly authProvider: WorkspaceAuthProvider;
 
   constructor(options: WorkspaceAccessOptions = {}) {
     const env = options.env ?? process.env;
     const configuredPath = options.path ?? env["PI_WEB_WORKSPACE_ACCESS"];
     this.path = configuredPath ?? "~/.pi-web/workspace-access.json";
-    this.internalAuth = InternalAdminAuth.fromEnv(env);
-    this.enabled = options.enabled ?? isEnabled(env["PI_WEB_WORKSPACE_AUTH"] ?? env["PI_WEB_WORKSPACE_ACCESS_ENABLED"] ?? (this.internalAuth === undefined ? (configuredPath === undefined ? undefined : "true") : "true"));
-    this.policy = this.enabled ? loadInitialWorkspaceAccessPolicy(this.path, this.internalAuth !== undefined) : undefined;
+    this.authProvider = createWorkspaceAuthProvider(env);
+    const defaultEnabled = env["PI_WEB_WORKSPACE_AUTH"]
+      ?? env["PI_WEB_WORKSPACE_ACCESS_ENABLED"]
+      ?? (this.authProvider.isConfigured() ? "true" : (configuredPath === undefined ? undefined : "true"));
+    this.enabled = options.enabled ?? isEnabled(defaultEnabled);
+    this.policy = this.enabled ? loadInitialWorkspaceAccessPolicy(this.path, this.authProvider.allowMissingPolicy()) : undefined;
     this.trustAuthHeaders = isEnabled(env["PI_WEB_TRUST_AUTH_HEADERS"]);
+  }
+
+  provider(): WorkspaceAuthProviderKind {
+    return this.authProvider.kind;
+  }
+
+  publicAuthSettings(): WorkspaceAuthPublicSettings {
+    return this.authProvider.publicSettings(this.enabled);
+  }
+
+  adminBootstrapAvailable(): boolean {
+    if (!this.enabled || this.authProvider.kind !== "better-auth") return false;
+    return this.currentPolicy().admins.length === 0;
+  }
+
+  bootstrapAdmin(request: FastifyRequest): WorkspaceAccessPolicy {
+    if (!this.adminBootstrapAvailable()) throw new WorkspaceAccessError(403, "Admin bootstrap is not available");
+    const userId = getRequestUserId(request);
+    if (userId === undefined || userId === "") throw new WorkspaceAccessError(401, "Authentication required");
+    const policy = this.currentPolicy();
+    policy.admins = [userId];
+    policy.users[userId] ??= { id: userId, workspaces: [], telegramUserIds: [] };
+    return this.savePolicy(policy);
   }
 
   isEnabled(): boolean {
@@ -62,9 +88,8 @@ export class WorkspaceAccessController {
     return expandHome(this.path);
   }
 
-
   hasInternalAuth(): boolean {
-    return this.internalAuth !== undefined;
+    return this.publicAuthSettings().internalAuth === true;
   }
 
   policyExists(): boolean {
@@ -86,13 +111,9 @@ export class WorkspaceAccessController {
     return clonePolicy(normalized);
   }
 
-  authenticateRequest(request: FastifyRequest): void {
+  async authenticateRequest(request: FastifyRequest): Promise<void> {
     if (!this.enabled) return;
-    const token = bearerToken(request) ?? accessTokenQuery(request) ?? sessionCookie(request);
-    if (token !== undefined && this.internalAuth?.matches(token) === true) {
-      setRequestUserId(request, this.internalAuth.userId);
-      request.piWebInternalAdmin = true;
-    }
+    await this.authProvider.authenticateRequest(request);
   }
 
   requireUser(request: FastifyRequest): WorkspaceAccessContext {
@@ -211,7 +232,9 @@ function expandHome(path: string): string {
 }
 
 function stringArray(value: unknown, name: string): string[] {
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || item === "")) throw new Error(`${name} must be an array of non-empty strings`);
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || item === "")) {
+    throw new Error(`${name} must be an array of non-empty strings`);
+  }
   return value.filter((item): item is string => typeof item === "string");
 }
 
@@ -222,7 +245,9 @@ function optionalStringArray(value: unknown, name: string): string[] {
 
 function optionalNumberArray(value: unknown, name: string): number[] {
   if (value === undefined) return [];
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "number" || !Number.isInteger(item))) throw new Error(`${name} must be an array of integer IDs`);
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "number" || !Number.isInteger(item))) {
+    throw new Error(`${name} must be an array of integer IDs`);
+  }
   return value.filter((item): item is number => typeof item === "number");
 }
 
@@ -230,57 +255,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-
-class InternalAdminAuth {
-  private constructor(readonly userId: string, private readonly token: string) {}
-
-  static fromEnv(env: NodeJS.ProcessEnv): InternalAdminAuth | undefined {
-    const token = nonEmpty(env["PI_WEB_INTERNAL_AUTH_TOKEN"] ?? env["PI_WEB_ADMIN_TOKEN"]);
-    if (token === undefined) return undefined;
-    const userId = nonEmpty(env["PI_WEB_INTERNAL_AUTH_USER_ID"] ?? env["PI_WEB_ADMIN_USER_ID"]) ?? "internal-admin";
-    return new InternalAdminAuth(userId, token);
-  }
-
-  matches(token: string): boolean {
-    const expected = Buffer.from(this.token);
-    const actual = Buffer.from(token);
-    return expected.length === actual.length && timingSafeEqual(expected, actual);
-  }
-}
-
-
-function bearerToken(request: FastifyRequest): string | undefined {
-  const authorization = headerValue(request.headers.authorization);
-  const match = authorization?.match(/^Bearer\s+(.+)$/iu);
-  return match?.[1];
-}
-
-function accessTokenQuery(request: FastifyRequest): string | undefined {
-  const query = request.query;
-  if (!isRecord(query)) return undefined;
-  const token = query["access_token"];
-  return typeof token === "string" && token !== "" ? token : undefined;
-}
-
-function sessionCookie(request: FastifyRequest): string | undefined {
-  const cookie = headerValue(request.headers.cookie);
-  if (cookie === undefined) return undefined;
-  for (const part of cookie.split(";")) {
-    const [name, ...value] = part.trim().split("=");
-    if (name === "__session" && value.length > 0) return decodeURIComponent(value.join("="));
-  }
-  return undefined;
-}
-
-
 function getRequestUserId(request: FastifyRequest): string | undefined {
   return request.piWebUserId;
-}
-
-function setRequestUserId(request: FastifyRequest, userId: string): void {
-  request.piWebUserId = userId;
-}
-
-function nonEmpty(value: string | undefined): string | undefined {
-  return value === undefined || value === "" ? undefined : value;
 }
