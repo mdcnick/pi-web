@@ -49,6 +49,7 @@ function registerLocalProjectRoutes(app: FastifyInstance, projects: ProjectServi
     try {
       if (!workspaceAccess.isEnabled()) return await projects.list();
       const user = workspaceAccess.requireUser(request);
+      if (user.isAdmin) return await projects.list();
       const allProjects = await projects.list();
       const filtered: Project[] = [];
       for (const project of allProjects) {

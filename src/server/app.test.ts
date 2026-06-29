@@ -441,6 +441,85 @@ describe("buildApp", () => {
     }
   });
 
+  it("accepts an internal admin token without Clerk or a preexisting policy file", async () => {
+    const policyPath = join(tempDir, "missing-workspace-access.json");
+    const authApp = await buildApp({
+      projects: new ProjectService(new ProjectStore(join(tempDir, "internal-auth-projects.json"))),
+      workspaces: new WorkspaceService(),
+      sessionDaemon: fakeSessionDaemon(),
+      workspaceAccess: new WorkspaceAccessController({
+        path: policyPath,
+        env: { PI_WEB_INTERNAL_AUTH_TOKEN: "admin-secret" },
+      }),
+      clientDist: false,
+      logger: false,
+    });
+    try {
+      const publicResponse = await authApp.inject({ method: "GET", url: "/api/workspace-access/public" });
+      const blockedResponse = await authApp.inject({ method: "GET", url: "/api/projects" });
+      const addResponse = await authApp.inject({
+        method: "POST",
+        url: "/api/projects",
+        headers: { authorization: "Bearer admin-secret" },
+        payload: { name: "Internal Admin", path: projectDir, create: true },
+      });
+      const listResponse = await authApp.inject({
+        method: "GET",
+        url: "/api/projects",
+        headers: { authorization: "Bearer admin-secret" },
+      });
+
+      expect(publicResponse.statusCode).toBe(200);
+      expect(publicResponse.json()).toEqual({ enabled: true, internalAuth: true });
+      expect(blockedResponse.statusCode).toBe(401);
+      expect(blockedResponse.json()).toEqual({ error: "Authentication required" });
+      expect(addResponse.statusCode).toBe(200);
+      expect(listResponse.statusCode).toBe(200);
+      expect(listResponse.json<Project[]>()).toEqual([addResponse.json<Project>()]);
+    } finally {
+      await authApp.close();
+    }
+  });
+
+  it("lists every project for admins without workspace filtering", async () => {
+    const policyPath = join(tempDir, "workspace-access-admin.json");
+    await writeFile(policyPath, JSON.stringify({ admins: ["user_admin"], users: {} }));
+    const projects = new ProjectService(new ProjectStore(join(tempDir, "admin-projects.json")));
+    const firstProject = await projects.add({ name: "First", path: join(tempDir, "first"), create: true });
+    const secondProject = await projects.add({ name: "Second", path: join(tempDir, "second"), create: true });
+    const listWorkspaces = vi.fn<WorkspaceService["list"]>(() => {
+      throw new Error("workspace filtering should not run for admins");
+    });
+    class AdminListWorkspaceService extends WorkspaceService {
+      override list(project: Project): Promise<Workspace[]> {
+        return listWorkspaces(project);
+      }
+    }
+    const authApp = await buildApp({
+      projects,
+      workspaces: new AdminListWorkspaceService(),
+      sessionDaemon: fakeSessionDaemon(),
+      workspaceAccess: new WorkspaceAccessController({
+        path: policyPath,
+        env: {
+          PI_WEB_WORKSPACE_AUTH: "true",
+          PI_WEB_TRUST_AUTH_HEADERS: "true",
+        },
+      }),
+      clientDist: false,
+      logger: false,
+    });
+    try {
+      const response = await authApp.inject({ method: "GET", url: "/api/projects", headers: { "x-pi-web-user-id": "user_admin" } });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json<Project[]>()).toEqual([firstProject, secondProject]);
+      expect(listWorkspaces).not.toHaveBeenCalled();
+    } finally {
+      await authApp.close();
+    }
+  });
+
   it("returns stable errors for invalid project requests", async () => {
     const addResponse = await app.inject({
       method: "POST",

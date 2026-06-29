@@ -1,4 +1,4 @@
-import { webcrypto } from "node:crypto";
+import { timingSafeEqual, webcrypto } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -8,6 +8,7 @@ import { cwdPathsEqual, normalizeRequestCwd } from "./workingDirectory.js";
 declare module "fastify" {
   interface FastifyRequest {
     piWebUserId?: string;
+    piWebInternalAdmin?: boolean;
   }
 }
 
@@ -43,13 +44,15 @@ export class WorkspaceAccessController {
   private readonly auth: ClerkJwtVerifier | undefined;
   private readonly trustAuthHeaders: boolean;
   private readonly publishableKey: string | undefined;
+  private readonly internalAuth: InternalAdminAuth | undefined;
 
   constructor(options: WorkspaceAccessOptions = {}) {
     const env = options.env ?? process.env;
     const configuredPath = options.path ?? env["PI_WEB_WORKSPACE_ACCESS"];
     this.path = configuredPath ?? "~/.pi-web/workspace-access.json";
-    this.enabled = options.enabled ?? isEnabled(env["PI_WEB_WORKSPACE_AUTH"] ?? env["PI_WEB_WORKSPACE_ACCESS_ENABLED"] ?? (configuredPath === undefined ? undefined : "true"));
-    this.policy = this.enabled ? loadWorkspaceAccessPolicy(this.path) : undefined;
+    this.internalAuth = InternalAdminAuth.fromEnv(env);
+    this.enabled = options.enabled ?? isEnabled(env["PI_WEB_WORKSPACE_AUTH"] ?? env["PI_WEB_WORKSPACE_ACCESS_ENABLED"] ?? (this.internalAuth === undefined ? (configuredPath === undefined ? undefined : "true") : "true"));
+    this.policy = this.enabled ? loadInitialWorkspaceAccessPolicy(this.path, this.internalAuth !== undefined) : undefined;
     this.auth = this.enabled ? ClerkJwtVerifier.fromEnv(env) : undefined;
     this.trustAuthHeaders = isEnabled(env["PI_WEB_TRUST_AUTH_HEADERS"]);
     this.publishableKey = nonEmpty(env["CLERK_PUBLISHABLE_KEY"] ?? env["PI_WEB_CLERK_PUBLISHABLE_KEY"] ?? env["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"]) ?? publishableKeyFromIssuer(env["CLERK_ISSUER"] ?? env["PI_WEB_CLERK_ISSUER"]);
@@ -65,6 +68,10 @@ export class WorkspaceAccessController {
 
   clerkPublishableKey(): string | undefined {
     return this.publishableKey;
+  }
+
+  hasInternalAuth(): boolean {
+    return this.internalAuth !== undefined;
   }
 
   policyExists(): boolean {
@@ -89,6 +96,11 @@ export class WorkspaceAccessController {
   async authenticateRequest(request: FastifyRequest): Promise<void> {
     if (!this.enabled) return;
     const token = bearerToken(request) ?? accessTokenQuery(request) ?? clerkSessionCookie(request);
+    if (token !== undefined && this.internalAuth?.matches(token) === true) {
+      setRequestUserId(request, this.internalAuth.userId);
+      request.piWebInternalAdmin = true;
+      return;
+    }
     if (token !== undefined && this.auth !== undefined) {
       setRequestUserId(request, await this.auth.verify(token));
     }
@@ -100,7 +112,7 @@ export class WorkspaceAccessController {
     if (userId === undefined || userId === "") throw new WorkspaceAccessError(401, "Authentication required");
     const policy = this.requirePolicy();
     const user = policy.users[userId];
-    const isAdmin = policy.admins.includes(userId);
+    const isAdmin = (request.piWebInternalAdmin === true && getRequestUserId(request) === userId) || policy.admins.includes(userId);
     if (user === undefined && !isAdmin) throw new WorkspaceAccessError(403, "User is not allowed in PI WEB");
     return { userId, isAdmin, ...(user === undefined ? {} : { user }) };
   }
@@ -142,6 +154,15 @@ export function workspaceAccessErrorStatus(error: unknown): number {
   if (error instanceof WorkspaceAccessError) return error.statusCode;
   if (error instanceof Error && error.message.endsWith("not found")) return 404;
   return 400;
+}
+
+function loadInitialWorkspaceAccessPolicy(path: string, allowMissing: boolean): WorkspaceAccessPolicy {
+  const filePath = expandHome(path);
+  if (!existsSync(filePath)) {
+    if (allowMissing) return emptyWorkspaceAccessPolicy();
+    throw new Error(`Workspace access policy does not exist: ${filePath}`);
+  }
+  return loadWorkspaceAccessPolicy(path);
 }
 
 export function loadWorkspaceAccessPolicy(path: string): WorkspaceAccessPolicy {
@@ -239,6 +260,23 @@ interface ClerkJsonWebKey extends JsonWebKey {
 
 interface JsonWebKeySet {
   keys?: ClerkJsonWebKey[];
+}
+
+class InternalAdminAuth {
+  private constructor(readonly userId: string, private readonly token: string) {}
+
+  static fromEnv(env: NodeJS.ProcessEnv): InternalAdminAuth | undefined {
+    const token = nonEmpty(env["PI_WEB_INTERNAL_AUTH_TOKEN"] ?? env["PI_WEB_ADMIN_TOKEN"]);
+    if (token === undefined) return undefined;
+    const userId = nonEmpty(env["PI_WEB_INTERNAL_AUTH_USER_ID"] ?? env["PI_WEB_ADMIN_USER_ID"]) ?? "internal-admin";
+    return new InternalAdminAuth(userId, token);
+  }
+
+  matches(token: string): boolean {
+    const expected = Buffer.from(this.token);
+    const actual = Buffer.from(token);
+    return expected.length === actual.length && timingSafeEqual(expected, actual);
+  }
 }
 
 class ClerkJwtVerifier {
