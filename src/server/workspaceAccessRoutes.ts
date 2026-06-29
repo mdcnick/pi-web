@@ -1,8 +1,10 @@
 import type { FastifyInstance } from "fastify";
+import type { WorkspaceAuthProviderKind } from "./auth/workspaceAuthProvider.js";
 import { WorkspaceAccessController, workspaceAccessErrorStatus, type WorkspaceAccessPolicy } from "./workspaceAccessPolicy.js";
 
 export interface WorkspaceAccessSettingsResponse {
   enabled: boolean;
+  provider: WorkspaceAuthProviderKind;
   path: string;
   exists: boolean;
   policy: WorkspaceAccessPolicy;
@@ -10,6 +12,7 @@ export interface WorkspaceAccessSettingsResponse {
 
 export interface WorkspaceAccessPublicResponse {
   enabled: boolean;
+  provider: WorkspaceAuthProviderKind;
   internalAuth?: boolean;
 }
 
@@ -41,6 +44,7 @@ export function registerWorkspaceAccessRoutes(app: FastifyInstance, workspaceAcc
 function workspaceAccessSettings(workspaceAccess: WorkspaceAccessController): WorkspaceAccessSettingsResponse {
   return {
     enabled: workspaceAccess.isEnabled(),
+    provider: workspaceAccess.provider(),
     path: workspaceAccess.policyPath(),
     exists: workspaceAccess.policyExists(),
     policy: workspaceAccess.currentPolicy(),
@@ -48,9 +52,5 @@ function workspaceAccessSettings(workspaceAccess: WorkspaceAccessController): Wo
 }
 
 function workspaceAccessPublicSettings(workspaceAccess: WorkspaceAccessController): WorkspaceAccessPublicResponse {
-  const internalAuth = workspaceAccess.hasInternalAuth();
-  return {
-    enabled: workspaceAccess.isEnabled(),
-    ...(internalAuth ? { internalAuth } : {}),
-  };
+  return workspaceAccess.publicAuthSettings();
 }

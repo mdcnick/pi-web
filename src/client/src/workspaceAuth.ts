@@ -1,5 +1,8 @@
+type WorkspaceAuthProvider = "internal" | "better-auth";
+
 interface WorkspaceAuthPublicResponse {
   enabled: boolean;
+  provider: WorkspaceAuthProvider;
   internalAuth?: boolean;
 }
 
@@ -10,7 +13,14 @@ let cachedToken: string | undefined;
 export async function initializeWorkspaceAuth(): Promise<boolean> {
   const settings = await loadWorkspaceAuthSettings();
   if (!settings.enabled) return true;
+
+  if (settings.provider === "better-auth") {
+    renderAuthenticatedAppShell();
+    return true;
+  }
+
   if (settings.internalAuth === true) return await initializeInternalAuth();
+
   renderBlockingAuthMessage("Workspace auth is enabled, but PI_WEB_INTERNAL_AUTH_TOKEN or PI_WEB_ADMIN_TOKEN is not configured for PI WEB.");
   return false;
 }
@@ -29,11 +39,17 @@ export function workspaceAuthQuery(): string {
 
 async function loadWorkspaceAuthSettings(): Promise<WorkspaceAuthPublicResponse> {
   const response = await fetch("/api/workspace-access/public", { cache: "no-store" });
-  if (!response.ok) return { enabled: false };
+  if (!response.ok) return { enabled: false, provider: "internal" };
   const value: unknown = await response.json();
-  if (!isRecord(value) || typeof value["enabled"] !== "boolean") return { enabled: false };
+  if (!isRecord(value) || typeof value["enabled"] !== "boolean") return { enabled: false, provider: "internal" };
+  const provider = parseWorkspaceAuthProvider(value["provider"]);
   const internalAuth = value["internalAuth"] === true;
-  return { enabled: value["enabled"], ...(internalAuth ? { internalAuth } : {}) };
+  return { enabled: value["enabled"], provider, ...(internalAuth ? { internalAuth } : {}) };
+}
+
+function parseWorkspaceAuthProvider(value: unknown): WorkspaceAuthProvider {
+  if (value === "better-auth") return "better-auth";
+  return "internal";
 }
 
 function currentAuthToken(): string | undefined {

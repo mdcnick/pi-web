@@ -431,7 +431,7 @@ describe("buildApp", () => {
       const authedResponse = await authApp.inject({ method: "GET", url: "/api/projects", headers: { "x-pi-web-user-id": "user_admin" } });
 
       expect(publicResponse.statusCode).toBe(200);
-      expect(publicResponse.json()).toEqual({ enabled: true });
+      expect(publicResponse.json()).toEqual({ enabled: true, provider: "internal" });
       expect(blockedResponse.statusCode).toBe(401);
       expect(blockedResponse.json()).toEqual({ error: "Authentication required" });
       expect(authedResponse.statusCode).toBe(200);
@@ -469,13 +469,83 @@ describe("buildApp", () => {
       });
 
       expect(publicResponse.statusCode).toBe(200);
-      expect(publicResponse.json()).toEqual({ enabled: true, internalAuth: true });
+      expect(publicResponse.json()).toEqual({ enabled: true, provider: "internal", internalAuth: true });
       expect(blockedResponse.statusCode).toBe(401);
       expect(blockedResponse.json()).toEqual({ error: "Authentication required" });
       expect(addResponse.statusCode).toBe(200);
       expect(listResponse.statusCode).toBe(200);
       expect(listResponse.json<Project[]>()).toEqual([addResponse.json<Project>()]);
     } finally {
+      await authApp.close();
+    }
+  });
+
+  it("supports better-auth provider in workspace auth settings", async () => {
+    const policyPath = join(tempDir, "workspace-access-better-auth.json");
+    await writeFile(policyPath, JSON.stringify({ admins: ["user_admin"], users: {} }));
+    const authApp = await buildApp({
+      projects: new ProjectService(new ProjectStore(join(tempDir, "better-auth-projects.json"))),
+      workspaces: new WorkspaceService(),
+      sessionDaemon: fakeSessionDaemon(),
+      workspaceAccess: new WorkspaceAccessController({
+        path: policyPath,
+        env: {
+          PI_WEB_AUTH_PROVIDER: "better-auth",
+          PI_WEB_WORKSPACE_AUTH: "true",
+          BETTER_AUTH_API_URL: "https://better-auth.test",
+          BETTER_AUTH_SESSION_PATH: "/api/auth/session",
+        },
+      }),
+      clientDist: false,
+      logger: false,
+    });
+    try {
+      const publicResponse = await authApp.inject({ method: "GET", url: "/api/workspace-access/public" });
+      const blockedResponse = await authApp.inject({ method: "GET", url: "/api/projects" });
+      expect(publicResponse.statusCode).toBe(200);
+      expect(publicResponse.json()).toEqual({ enabled: true, provider: "better-auth" });
+      expect(blockedResponse.statusCode).toBe(401);
+    } finally {
+      await authApp.close();
+    }
+  });
+
+  it("authenticates workspace users through better-auth session endpoint", async () => {
+    const policyPath = join(tempDir, "better-auth-authenticated-users.json");
+    await writeFile(policyPath, JSON.stringify({ admins: [], users: { user_better_auth: { workspaces: [] } } }));
+    const fetchMock = vi.fn((input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      expect(url).toBe("https://better-auth.test/api/auth/session");
+      expect(init?.headers).toMatchObject({ authorization: "Bearer session-token", "x-api-key": "provider-key" });
+      return Promise.resolve(Response.json({ user: { id: "user_better_auth" } }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const authApp = await buildApp({
+      projects: new ProjectService(new ProjectStore(join(tempDir, "better-auth-sessions-projects.json"))),
+      workspaces: new WorkspaceService(),
+      sessionDaemon: fakeSessionDaemon(),
+      workspaceAccess: new WorkspaceAccessController({
+        path: policyPath,
+        env: {
+          PI_WEB_AUTH_PROVIDER: "better-auth",
+          PI_WEB_WORKSPACE_AUTH: "true",
+          BETTER_AUTH_API_URL: "https://better-auth.test",
+          BETTER_AUTH_SESSION_PATH: "/api/auth/session",
+          BETTER_AUTH_API_KEY: "provider-key",
+        },
+      }),
+      clientDist: false,
+      logger: false,
+    });
+
+    try {
+      const response = await authApp.inject({ method: "GET", url: "/api/projects", headers: { authorization: "Bearer session-token" } });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json<Project[]>()).toEqual([]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
       await authApp.close();
     }
   });
