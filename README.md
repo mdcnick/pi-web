@@ -278,7 +278,7 @@ Environment variables:
 - `PI_WEB_PROJECTS_FILE` — optional override for the projects storage JSON file. Defaults to `$PI_WEB_DATA_DIR/projects.json`.
 - `PI_WEB_MACHINES_FILE` — optional override for the remote machine registry JSON file. Defaults to `$PI_WEB_DATA_DIR/machines.json`.
 - `PI_WEB_MAX_UPLOAD_BYTES` — maximum accepted HTTP request body size in bytes (covers pasted/attached images). Defaults to 64 MB. Also configurable as `maxUploadBytes` in `config.json`.
-- `PI_WEB_INTERNAL_AUTH_TOKEN` / `PI_WEB_ADMIN_TOKEN` — enables built-in admin sign-in without Clerk. The browser shows an internal admin access-key form, sends the token as a bearer token, and treats that token as an admin user who can see every project and workspace. Keep this value secret and use it only behind a private network, VPN, tunnel, or reverse proxy.
+- `PI_WEB_INTERNAL_AUTH_TOKEN` / `PI_WEB_ADMIN_TOKEN` — enables built-in admin sign-in without any external auth provider. The browser shows an internal admin access-key form, sends the token as a bearer token, and treats that token as an admin user who can see every project and workspace. Keep this value secret and use it only behind a private network, VPN, tunnel, or reverse proxy.
 - `PI_WEB_INTERNAL_AUTH_USER_ID` / `PI_WEB_ADMIN_USER_ID` — optional user id reported for the internal admin token. Defaults to `internal-admin`.
 - `PI_WEB_WORKSPACE_AUTH` / `PI_WEB_WORKSPACE_ACCESS_ENABLED` — enables workspace access policy enforcement. A configured `PI_WEB_INTERNAL_AUTH_TOKEN` also enables it automatically.
 - `PI_WEB_WORKSPACE_ACCESS` — optional workspace access policy JSON path. Defaults to `~/.pi-web/workspace-access.json`.

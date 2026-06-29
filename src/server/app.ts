@@ -133,15 +133,21 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
     localRuntime: () => getPiWebRuntime(sessionDaemon),
   });
 
-  app.addHook("preHandler", async (request) => {
-    await workspaceAccess.authenticateRequest(request);
-    if (!workspaceAccess.isEnabled()) return;
-    const path = request.url.split("?", 1)[0] ?? request.url;
-    if (path === "/api/config"
-      || path === "/api/system/resources"
-      || path === "/api/machines/local/system/resources"
-      || (path.startsWith("/api/machines") && !path.startsWith("/api/machines/local"))) {
-      workspaceAccess.requireAdmin(request);
+  app.addHook("preHandler", (request, _reply, done) => {
+    try {
+      workspaceAccess.authenticateRequest(request);
+      if (workspaceAccess.isEnabled()) {
+        const path = request.url.split("?", 1)[0] ?? request.url;
+        if (path === "/api/config"
+          || path === "/api/system/resources"
+          || path === "/api/machines/local/system/resources"
+          || (path.startsWith("/api/machines") && !path.startsWith("/api/machines/local"))) {
+          workspaceAccess.requireAdmin(request);
+        }
+      }
+      done();
+    } catch (error) {
+      done(error instanceof Error ? error : new Error(String(error)));
     }
   });
 

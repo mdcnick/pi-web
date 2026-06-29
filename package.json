@@ -50,8 +50,6 @@
     "changelog:status": "changeset status"
   },
   "dependencies": {
-    "@clerk/clerk-js": "^6.22.0",
-    "@clerk/ui": "^1.23.0",
     "@codemirror/commands": "^6.10.3",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-go": "^6.0.1",

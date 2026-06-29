@@ -408,7 +408,7 @@ describe("buildApp", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it("serves public Clerk settings when workspace auth blocks other API routes", async () => {
+  it("serves public internal auth settings when workspace auth blocks other API routes", async () => {
     const policyPath = join(tempDir, "workspace-access.json");
     await writeFile(policyPath, JSON.stringify({ admins: ["user_admin"], users: {} }));
     const authApp = await buildApp({
@@ -419,7 +419,6 @@ describe("buildApp", () => {
         path: policyPath,
         env: {
           PI_WEB_WORKSPACE_AUTH: "true",
-          CLERK_ISSUER: "https://renewed-mastiff-20.clerk.accounts.dev",
           PI_WEB_TRUST_AUTH_HEADERS: "true",
         },
       }),
@@ -432,7 +431,7 @@ describe("buildApp", () => {
       const authedResponse = await authApp.inject({ method: "GET", url: "/api/projects", headers: { "x-pi-web-user-id": "user_admin" } });
 
       expect(publicResponse.statusCode).toBe(200);
-      expect(publicResponse.json()).toEqual({ enabled: true, publishableKey: "pk_test_cmVuZXdlZC1tYXN0aWZmLTIwLmNsZXJrLmFjY291bnRzLmRldiQ" });
+      expect(publicResponse.json()).toEqual({ enabled: true });
       expect(blockedResponse.statusCode).toBe(401);
       expect(blockedResponse.json()).toEqual({ error: "Authentication required" });
       expect(authedResponse.statusCode).toBe(200);
@@ -441,7 +440,7 @@ describe("buildApp", () => {
     }
   });
 
-  it("accepts an internal admin token without Clerk or a preexisting policy file", async () => {
+  it("accepts an internal admin token without a preexisting policy file", async () => {
     const policyPath = join(tempDir, "missing-workspace-access.json");
     const authApp = await buildApp({
       projects: new ProjectService(new ProjectStore(join(tempDir, "internal-auth-projects.json"))),

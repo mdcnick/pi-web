@@ -1,4 +1,4 @@
-import { workspaceAuthQuery } from "../clerkAuth";
+import { workspaceAuthQuery } from "../workspaceAuth";
 
 import type { SessionRef } from "../../../shared/apiTypes";
 

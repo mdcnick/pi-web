@@ -1,52 +1,47 @@
-import type { Clerk } from "@clerk/clerk-js";
-
 interface WorkspaceAuthPublicResponse {
   enabled: boolean;
-  publishableKey?: string;
   internalAuth?: boolean;
 }
 
 const internalAuthStorageKey = "pi-web.internalAuthToken";
 
-let clerk: Clerk | undefined;
 let cachedToken: string | undefined;
-let tokenPromise: Promise<string | undefined> | undefined;
 
 export async function initializeWorkspaceAuth(): Promise<boolean> {
   const settings = await loadWorkspaceAuthSettings();
   if (!settings.enabled) return true;
-  if (settings.publishableKey !== undefined && settings.publishableKey !== "") return await initializeClerkAuth(settings.publishableKey);
   if (settings.internalAuth === true) return await initializeInternalAuth();
-  renderBlockingAuthMessage("Workspace auth is enabled, but neither CLERK_PUBLISHABLE_KEY nor PI_WEB_INTERNAL_AUTH_TOKEN is configured for PI WEB.");
+  renderBlockingAuthMessage("Workspace auth is enabled, but PI_WEB_INTERNAL_AUTH_TOKEN or PI_WEB_ADMIN_TOKEN is not configured for PI WEB.");
   return false;
 }
 
-async function initializeClerkAuth(publishableKey: string): Promise<boolean> {
-  const [{ Clerk: ClerkBrowser }, { ui }] = await Promise.all([import("@clerk/clerk-js"), import("@clerk/ui")]);
-  clerk = new ClerkBrowser(publishableKey);
-  renderBlockingAuthMessage("Loading sign in…");
-  try {
-    await clerk.load({ ui });
-  } catch (error) {
-    renderBlockingAuthMessage(`Clerk failed to load: ${error instanceof Error ? error.message : String(error)}`);
-    return false;
-  }
+export function workspaceAuthHeaders(): HeadersInit {
+  if (!hasBrowserDocument()) return {};
+  const token = currentAuthToken();
+  return token === undefined ? {} : { authorization: `Bearer ${token}` };
+}
 
-  if (clerk.isSignedIn) {
-    await refreshAuthToken();
-    clerk.addListener(() => { void refreshAuthToken(); });
-    renderAuthenticatedAppShell();
-    return true;
-  }
+export function workspaceAuthQuery(): string {
+  if (!hasBrowserDocument()) return "";
+  const token = currentAuthToken();
+  return token === undefined ? "" : new URLSearchParams({ access_token: token }).toString();
+}
 
-  clerk.addListener(() => {
-    if (clerk?.isSignedIn !== true) return;
-    void refreshAuthToken().finally(() => {
-      window.location.reload();
-    });
-  });
-  renderSignIn(clerk);
-  return false;
+async function loadWorkspaceAuthSettings(): Promise<WorkspaceAuthPublicResponse> {
+  const response = await fetch("/api/workspace-access/public", { cache: "no-store" });
+  if (!response.ok) return { enabled: false };
+  const value: unknown = await response.json();
+  if (!isRecord(value) || typeof value["enabled"] !== "boolean") return { enabled: false };
+  const internalAuth = value["internalAuth"] === true;
+  return { enabled: value["enabled"], ...(internalAuth ? { internalAuth } : {}) };
+}
+
+function currentAuthToken(): string | undefined {
+  if (cachedToken !== undefined) return cachedToken;
+  const storedToken = readInternalAuthToken();
+  if (storedToken === undefined) return undefined;
+  setInternalAuthToken(storedToken);
+  return cachedToken;
 }
 
 async function initializeInternalAuth(): Promise<boolean> {
@@ -66,49 +61,6 @@ async function initializeInternalAuth(): Promise<boolean> {
   return false;
 }
 
-export async function workspaceAuthHeaders(): Promise<HeadersInit> {
-  if (!hasBrowserDocument()) return {};
-  const token = await currentAuthToken();
-  return token === undefined ? {} : { authorization: `Bearer ${token}` };
-}
-
-export function workspaceAuthQuery(): string {
-  if (!hasBrowserDocument()) return "";
-  return cachedToken === undefined ? "" : new URLSearchParams({ access_token: cachedToken }).toString();
-}
-
-async function loadWorkspaceAuthSettings(): Promise<WorkspaceAuthPublicResponse> {
-  const response = await fetch("/api/workspace-access/public", { cache: "no-store" });
-  if (!response.ok) return { enabled: false };
-  const value: unknown = await response.json();
-  if (!isRecord(value) || typeof value["enabled"] !== "boolean") return { enabled: false };
-  const publishableKey = typeof value["publishableKey"] === "string" ? value["publishableKey"] : undefined;
-  const internalAuth = value["internalAuth"] === true;
-  return { enabled: value["enabled"], ...(publishableKey === undefined ? {} : { publishableKey }), ...(internalAuth ? { internalAuth } : {}) };
-}
-
-async function currentAuthToken(): Promise<string | undefined> {
-  if (cachedToken !== undefined) return cachedToken;
-  if (tokenPromise !== undefined) return await tokenPromise;
-  tokenPromise = refreshAuthToken();
-  try {
-    return await tokenPromise;
-  } finally {
-    tokenPromise = undefined;
-  }
-}
-
-async function refreshAuthToken(): Promise<string | undefined> {
-  if (clerk === undefined) {
-    syncSessionCookie(cachedToken);
-    return cachedToken;
-  }
-  const token = await clerk.session?.getToken();
-  cachedToken = token ?? undefined;
-  syncSessionCookie(cachedToken);
-  return cachedToken;
-}
-
 function syncSessionCookie(token: string | undefined): void {
   if (!hasBrowserDocument()) return;
   const secure = window.location.protocol === "https:" ? "; Secure" : "";
@@ -117,17 +69,6 @@ function syncSessionCookie(token: string | undefined): void {
     return;
   }
   document.cookie = `__session=${encodeURIComponent(token)}; Path=/; SameSite=Lax${secure}`;
-}
-
-function renderSignIn(activeClerk: Clerk): void {
-  const root = authRoot();
-  root.innerHTML = `<div class="pi-auth-card" id="pi-clerk-sign-in"></div>`;
-  const mount = root.querySelector("#pi-clerk-sign-in");
-  if (!(mount instanceof HTMLDivElement)) return;
-  activeClerk.mountSignIn(mount, {
-    fallbackRedirectUrl: window.location.href,
-    routing: "hash",
-  });
 }
 
 function renderInternalSignIn(error?: string): void {
