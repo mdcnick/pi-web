@@ -317,7 +317,7 @@ function parseUsers(value: unknown): TelegramGatewayUserSettings[] {
     const botLabel = optionalString(item["botLabel"]);
     const botToken = optionalString(item["botToken"]);
     const enabled = item["enabled"] !== false;
-    return { telegramUserId: id, ...(label === undefined ? {} : { label }), ...(cwd === undefined ? {} : { cwd }), ...(sessionId === undefined ? {} : { sessionId }), admin, ...(botId === undefined ? {} : { botId }), ...(botLabel === undefined ? {} : { botLabel }), ...(botToken === undefined ? {} : { botToken }), enabled }; 
+    return { telegramUserId: id, ...(label === undefined ? {} : { label }), ...(cwd === undefined ? {} : { cwd }), ...(sessionId === undefined ? {} : { sessionId }), admin, ...(botId === undefined ? {} : { botId }), ...(botLabel === undefined ? {} : { botLabel }), ...(botToken === undefined ? {} : { botToken }), enabled };
   });
 }
 
