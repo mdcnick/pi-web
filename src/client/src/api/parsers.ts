@@ -519,6 +519,7 @@ function parsePiWebConfigValues(value: unknown): PiWebConfigValues {
     ...optionalField("allowedHosts", optionalAllowedHosts(record["allowedHosts"])),
     ...optionalField("shortcuts", optionalShortcuts(record["shortcuts"])),
     ...optionalField("plugins", optionalPlugins(record["plugins"])),
+    ...optionalField("branding", optionalBranding(record["branding"])),
     ...optionalField("spawnSessions", optionalBoolean(record, "spawnSessions")),
     ...optionalField("subsessions", optionalBoolean(record, "subsessions")),
   };
@@ -551,6 +552,22 @@ function optionalPlugins(value: unknown): PiWebPluginConfigMap | undefined {
     if (settings !== undefined && (!isRecord(settings) || Array.isArray(settings))) throw new Error("Invalid PI WEB plugin settings field");
     return [pluginId, config];
   }));
+}
+
+function optionalBranding(value: unknown): PiWebConfigValues["branding"] | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value) || Array.isArray(value)) throw new Error("Invalid PI WEB branding field");
+  const result: Partial<NonNullable<PiWebConfigValues["branding"]>> = {};
+  for (const [key, brandingValue] of Object.entries(value)) {
+    if (typeof brandingValue !== "string" || brandingValue.trim() === "") throw new Error(`Invalid PI WEB branding ${key} field`);
+    if (!isAllowedBrandingField(key)) throw new Error(`Invalid PI WEB branding field: ${key}`);
+    result[key] = brandingValue;
+  }
+  return result;
+}
+
+function isAllowedBrandingField(key: string): key is keyof NonNullable<PiWebConfigValues["branding"]> {
+  return key === "siteName" || key === "siteTitle" || key === "siteShortName" || key === "description" || key === "logoUrl" || key === "faviconUrl" || key === "appleTouchIconUrl";
 }
 
 function parsePiWebConfigEnvOverrides(value: unknown): PiWebConfigEnvOverrides {

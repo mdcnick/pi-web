@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { AppAction } from "../actions";
 import { configApi, pluginsApi, type PiWebConfigResponse, type PiWebConfigValues, type PiWebPluginsResponse } from "../api";
 import type { SettingsSection } from "../settingsRoute";
+import "./settings/SettingsBrandingPanel";
 import "./settings/SettingsGeneralPanel";
 import "./settings/SettingsSessiondPanel";
 import "./settings/SettingsPluginsPanel";
@@ -11,6 +12,7 @@ import "./settings/SettingsShortcutsPanel";
 @customElement("settings-dialog")
 export class SettingsDialog extends LitElement {
   @property({ attribute: false }) section: SettingsSection = "general";
+  @property({ type: String }) brandName = "PI WEB";
   @property({ attribute: false }) actions: AppAction[] = [];
   @property({ attribute: false }) onNavigate?: (section: SettingsSection) => void;
   @property({ attribute: false }) onClose?: () => void;
@@ -37,17 +39,18 @@ export class SettingsDialog extends LitElement {
   override render(): TemplateResult {
     return html`
       <div class="backdrop" @mousedown=${() => this.onClose?.()}>
-        <section class="settings-shell" role="dialog" aria-modal="true" aria-label="PI WEB settings" @mousedown=${(event: MouseEvent) => { event.stopPropagation(); }} @keydown=${(event: KeyboardEvent) => { this.handleKeyDown(event); }}>
+        <section class="settings-shell" role="dialog" aria-modal="true" aria-label="${this.brandName} settings" @mousedown=${(event: MouseEvent) => { event.stopPropagation(); }} @keydown=${(event: KeyboardEvent) => { this.handleKeyDown(event); }}>
           <header class="settings-header">
             <div>
               <span class="eyebrow">Settings</span>
-              <h1>PI WEB</h1>
+              <h1>${this.brandName}</h1>
             </div>
             <button class="close-button" title="Close settings" aria-label="Close settings" @click=${() => this.onClose?.()}>×</button>
           </header>
           <div class="settings-body">
             <nav class="settings-nav" aria-label="Settings sections">
               ${this.renderNavButton("general", "General", "Server config")}
+              ${this.renderNavButton("branding", "Branding", "Site identity")}
               ${this.renderNavButton("sessiond", "Session daemon", "Runtime settings")}
               ${this.renderNavButton("plugins", "Plugins", "Enable and disable")}
               ${this.renderNavButton("shortcuts", "Keyboard", "Shortcuts")}
@@ -62,6 +65,19 @@ export class SettingsDialog extends LitElement {
   }
 
   private renderActiveSection(): TemplateResult {
+    if (this.section === "branding") {
+      return html`
+        <settings-branding-panel
+          .configResponse=${this.configResponse}
+          .loading=${this.loading}
+          .saving=${this.saving}
+          .error=${this.error}
+          .savedMessage=${this.savedMessage}
+          .onReload=${() => this.loadConfig()}
+          .onSave=${(config: PiWebConfigValues) => this.saveConfig(config)}
+        ></settings-branding-panel>
+      `;
+    }
     if (this.section === "sessiond") {
       return html`
         <settings-sessiond-panel

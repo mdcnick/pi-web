@@ -58,6 +58,7 @@ function parseConfigRequest(value: unknown): PiWebConfig {
   const allowedHosts = value["allowedHosts"];
   const shortcuts = value["shortcuts"];
   const plugins = value["plugins"];
+  const branding = value["branding"];
   const spawnSessions = value["spawnSessions"];
   const subsessions = value["subsessions"];
   if (host !== undefined) {
@@ -71,6 +72,7 @@ function parseConfigRequest(value: unknown): PiWebConfig {
   if (allowedHosts !== undefined) config.allowedHosts = parseAllowedHostsRequest(allowedHosts);
   if (shortcuts !== undefined) config.shortcuts = parseShortcutsRequest(shortcuts);
   if (plugins !== undefined) config.plugins = parsePluginsRequest(plugins);
+  if (branding !== undefined) config.branding = parseBrandingRequest(branding);
   if (spawnSessions !== undefined) {
     if (typeof spawnSessions !== "boolean") throw new Error("PI WEB config spawnSessions must be a boolean");
     config.spawnSessions = spawnSessions;
@@ -109,6 +111,31 @@ function parsePluginsRequest(value: unknown): NonNullable<PiWebConfig["plugins"]
     if (settings !== undefined && (!isRecord(settings) || Array.isArray(settings))) throw new Error("PI WEB config plugin settings must be objects");
     return [pluginId, config];
   }));
+}
+
+const PI_WEB_BRANDING_KEYS = ["siteName", "siteTitle", "siteShortName", "description", "logoUrl", "faviconUrl", "appleTouchIconUrl"] as const;
+type PiWebBrandingField = (typeof PI_WEB_BRANDING_KEYS)[number];
+const PI_WEB_BRANDING_KEY_SET = new Set<string>(PI_WEB_BRANDING_KEYS);
+
+function parseBrandingRequest(value: unknown): NonNullable<PiWebConfig["branding"]> {
+  if (!isRecord(value) || Array.isArray(value)) throw new Error("PI WEB config branding must be an object");
+  const result: Partial<NonNullable<PiWebConfig["branding"]>> = {};
+  for (const [key, rawValue] of Object.entries(value)) {
+    if (!isAllowedBrandingField(key)) {
+      throw new Error(`PI WEB config branding has unknown field: ${key}`);
+    }
+    result[key] = parseBrandingField(key, rawValue);
+  }
+  return result;
+}
+
+function isAllowedBrandingField(field: string): field is PiWebBrandingField {
+  return PI_WEB_BRANDING_KEY_SET.has(field);
+}
+
+function parseBrandingField(key: string, value: unknown): string {
+  if (typeof value !== "string" || value.trim() === "") throw new Error(`PI WEB config branding ${key} must be a non-empty string`);
+  return value.trim();
 }
 
 function piWebConfigEnvOverrides(env: NodeJS.ProcessEnv): PiWebConfigEnvOverrides {

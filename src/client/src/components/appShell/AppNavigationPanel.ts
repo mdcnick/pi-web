@@ -33,6 +33,8 @@ export class AppNavigationPanel extends LitElement {
   @property({ attribute: false }) deletingWorkspaceIds: string[] = [];
   @property({ attribute: false }) workspaceLabelItems: (workspace: Workspace) => WorkspaceLabelItem[] = () => [];
   @property({ attribute: false }) refreshControl: unknown;
+  @property({ type: String }) brandName = "PI WEB";
+  @property({ type: String }) brandLogoUrl = "";
   @property({ type: Boolean, reflect: true }) collapsible = false;
   @property({ type: Boolean, reflect: true }) compact = false;
   @property({ type: Boolean }) machinesCollapsed = false;
@@ -88,7 +90,7 @@ export class AppNavigationPanel extends LitElement {
   override render() {
     return html`
       <header>
-        <strong>PI WEB</strong>
+        <strong class="brand">${this.brandLogoUrl === "" ? null : html`<img src=${this.brandLogoUrl} alt="" aria-hidden="true">`}<span>${this.brandName}</span></strong>
         ${shouldShowMachinesSection(this.machines) ? html`
           <machine-switcher
             .machines=${this.machines}
@@ -205,6 +207,9 @@ export class AppNavigationPanel extends LitElement {
     :host([compact]) { flex: 1 1 auto; }
     header { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; border-bottom: 1px solid var(--pi-border); }
     header strong { flex: 0 0 auto; }
+    .brand { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+    .brand span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .brand img { width: 22px; height: 22px; object-fit: contain; border-radius: 5px; }
     machine-switcher { flex: 1 1 auto; min-width: 0; }
     :host([compact]) header { display: none; }
     .header-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }

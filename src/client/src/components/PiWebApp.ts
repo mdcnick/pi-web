@@ -1,6 +1,6 @@
 import { LitElement, html } from "lit";
 import { customElement, query, state } from "lit/decorators.js";
-import { configApi, piWebApi, terminalsApi, workspacesApi, type Machine, type MachineHealth, type PiWebConfigValues, type PiWebShortcutConfig, type Project, type RealtimeEvent, type SessionInfo, type TerminalCommandRun, type TerminalUiEvent, type Workspace } from "../api";
+import { configApi, piWebApi, terminalsApi, workspacesApi, type Machine, type MachineHealth, type PiWebBranding, type PiWebConfigValues, type PiWebShortcutConfig, type Project, type RealtimeEvent, type SessionInfo, type TerminalCommandRun, type TerminalUiEvent, type Workspace } from "../api";
 import type { AppAction } from "../actions";
 import { initialAppState, type AppState } from "../appState";
 import { isSessionActive } from "../../../shared/activity";
@@ -76,6 +76,8 @@ const TERMINAL_ROUTE_NAMESPACE = queryNamespace("core:workspace.terminal");
 const MIN_RESIZABLE_CHAT_WIDTH_PX = 320;
 const PANEL_EDGE_COLUMNS_WIDTH_PX = 2;
 const DESKTOP_SIDE_BY_SIDE_MEDIA_QUERY = "(min-width: 1181px)";
+const DEFAULT_SITE_NAME = "PI WEB";
+const DEFAULT_SITE_DESCRIPTION = "Remote web UI and browser control plane for persistent Pi Coding Agent sessions.";
 
 @customElement("pi-web-app")
 export class PiWebApp extends LitElement {
@@ -168,6 +170,7 @@ export class PiWebApp extends LitElement {
   @state() private isRefreshingApp = false;
   @state() private settingsSection: SettingsSection | undefined = readSettingsSection();
   @state() private shortcutConfig: PiWebShortcutConfig = {};
+  @state() private branding: PiWebBranding = {};
   private readonly onPopState = () => void this.withChatScrollTransition(async () => {
     this.restoreSettingsRoute();
     await this.restoreRoute(false);
@@ -331,6 +334,36 @@ export class PiWebApp extends LitElement {
 
   private applyClientConfig(config: PiWebConfigValues): void {
     this.shortcutConfig = config.shortcuts ?? {};
+    this.branding = config.branding ?? {};
+    this.applyBrandingConfig(this.branding);
+  }
+
+  private currentBrandName(): string {
+    return this.resolvedBranding(this.branding).siteName;
+  }
+
+  private applyBrandingConfig(branding: PiWebBranding): void {
+    const resolved = this.resolvedBranding(branding);
+    document.title = resolved.siteTitle;
+    applyLinkHref(document, "icon", resolved.faviconUrl ?? "/favicon.svg");
+    if (resolved.appleTouchIconUrl !== undefined) applyLinkHref(document, "apple-touch-icon", resolved.appleTouchIconUrl);
+    setMetaContent(document, "description", resolved.description);
+  }
+
+  private resolvedBranding(branding: PiWebBranding): { siteName: string; siteTitle: string; siteShortName: string; description: string; faviconUrl?: string; appleTouchIconUrl?: string; logoUrl?: string } {
+    const siteName = branding.siteName === undefined || branding.siteName === "" ? DEFAULT_SITE_NAME : branding.siteName;
+    const siteTitle = branding.siteTitle === undefined || branding.siteTitle === "" ? siteName : branding.siteTitle;
+    const siteShortName = branding.siteShortName === undefined || branding.siteShortName === "" ? siteName : branding.siteShortName;
+    const description = branding.description === undefined || branding.description === "" ? DEFAULT_SITE_DESCRIPTION : branding.description;
+    return {
+      siteName,
+      siteTitle,
+      siteShortName,
+      description,
+      ...(branding.logoUrl === undefined || branding.logoUrl === "" ? {} : { logoUrl: branding.logoUrl }),
+      ...(branding.faviconUrl === undefined || branding.faviconUrl === "" ? {} : { faviconUrl: branding.faviconUrl }),
+      ...(branding.appleTouchIconUrl === undefined || branding.appleTouchIconUrl === "" ? {} : { appleTouchIconUrl: branding.appleTouchIconUrl }),
+    };
   }
 
   private async refreshAppData(): Promise<void> {
@@ -1017,6 +1050,8 @@ export class PiWebApp extends LitElement {
     return html`
       <app-navigation-panel
         .machines=${this.state.machines}
+        .brandName=${this.currentBrandName()}
+        .brandLogoUrl=${this.branding.logoUrl ?? ""}
         .selectedMachine=${this.state.selectedMachine}
         .machineStatuses=${this.state.machineStatuses}
         .machineActivities=${this.state.machineActivities}
@@ -1752,12 +1787,36 @@ export class PiWebApp extends LitElement {
         ${state.projectDialogOpen ? html`<project-dialog .machineId=${selectedMachineId(state)} .onSubmit=${(path: string, create: boolean) => this.projects.addProject(path, create)} .onCancel=${() => { this.setState({ projectDialogOpen: false }); }}></project-dialog>` : null}
         ${state.machineDialogOpen ? html`<machine-dialog .error=${state.error} .onSubmit=${(input: MachineDialogSubmit) => this.submitMachineDialog(input)} .onCancel=${() => { this.setState({ machineDialogOpen: false }); }}></machine-dialog>` : null}
         ${state.themeDialog !== undefined ? html`<command-picker title=${state.themeDialog.title} .options=${state.themeDialog.options} .selectedValue=${state.themeDialog.selectedValue} .onPick=${(value: string) => { this.pickTheme(value); }} .onCancel=${() => { this.setState({ themeDialog: undefined }); }}></command-picker>` : null}
-        ${this.settingsSection !== undefined ? html`<settings-dialog .section=${this.settingsSection} .actions=${this.getDefaultActions()} .onNavigate=${(section: SettingsSection) => { this.navigateSettings(section); }} .onClose=${() => { this.closeSettings(); }} .onConfigSaved=${(config: PiWebConfigValues) => { this.applyClientConfig(config); }}></settings-dialog>` : null}
+        ${this.settingsSection !== undefined ? html`<settings-dialog .section=${this.settingsSection} .brandName=${this.currentBrandName()} .actions=${this.getDefaultActions()} .onNavigate=${(section: SettingsSection) => { this.navigateSettings(section); }} .onClose=${() => { this.closeSettings(); }} .onConfigSaved=${(config: PiWebConfigValues) => { this.applyClientConfig(config); }}></settings-dialog>` : null}
       </div>
     `;
   }
 
   static override styles = appStyles;
+}
+
+function applyLinkHref(documentRef: Document, rel: string, href: string): void {
+  const link = documentRef.head.querySelector(`link[rel='${rel}']`);
+  if (link instanceof HTMLLinkElement) {
+    link.href = href;
+    return;
+  }
+  const next = documentRef.createElement("link");
+  next.rel = rel;
+  next.href = href;
+  documentRef.head.append(next);
+}
+
+function setMetaContent(documentRef: Document, name: string, content: string): void {
+  const meta = documentRef.head.querySelector(`meta[name='${name}']`);
+  if (meta instanceof HTMLMetaElement) {
+    meta.content = content;
+    return;
+  }
+  const next = documentRef.createElement("meta");
+  next.name = name;
+  next.content = content;
+  documentRef.head.append(next);
 }
 
 function createPluginRegistry(): PluginRegistry {

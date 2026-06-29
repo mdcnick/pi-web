@@ -17,6 +17,9 @@ export interface LoadOptions {
   cwd?: string;
 }
 
+const DEFAULT_SITE_NAME = "PI WEB";
+const DEFAULT_SITE_DESCRIPTION = "Remote web UI and browser control plane for persistent Pi Coding Agent sessions.";
+
 export function defaultPiWebConfigPath(env: NodeJS.ProcessEnv = process.env): string {
   const xdgConfigHome = env["XDG_CONFIG_HOME"];
   return join(xdgConfigHome !== undefined && xdgConfigHome !== "" ? xdgConfigHome : join(homedir(), ".config"), "pi-web", "config.json");
@@ -104,6 +107,7 @@ export function savePiWebConfig(config: PiWebConfig, options: LoadOptions = {}):
   delete existing["maxUploadBytes"];
   delete existing["spawnSessions"];
   delete existing["subsessions"];
+  delete existing["branding"];
   const merged = { ...existing, ...piWebConfigRecord(normalized) };
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
@@ -124,6 +128,7 @@ function piWebConfigRecord(config: PiWebConfig): Record<string, unknown> {
     ...(config.allowedHosts !== undefined ? { allowedHosts: config.allowedHosts } : {}),
     ...(config.shortcuts !== undefined ? { shortcuts: config.shortcuts } : {}),
     ...(config.plugins !== undefined ? { plugins: config.plugins } : {}),
+    ...(config.branding !== undefined ? { branding: config.branding } : {}),
     ...(config.maxUploadBytes !== undefined ? { maxUploadBytes: config.maxUploadBytes } : {}),
     ...(config.spawnSessions !== undefined ? { spawnSessions: config.spawnSessions } : {}),
     ...(config.subsessions !== undefined ? { subsessions: config.subsessions } : {}),
@@ -137,10 +142,29 @@ function parsePiWebConfig(value: Record<string, unknown>, path: string): PiWebCo
     ...(value["allowedHosts"] !== undefined ? { allowedHosts: parseAllowedHosts(value["allowedHosts"], path) } : {}),
     ...(value["shortcuts"] !== undefined ? { shortcuts: parseShortcuts(value["shortcuts"], path) } : {}),
     ...(value["plugins"] !== undefined ? { plugins: parsePlugins(value["plugins"], path) } : {}),
+    ...(value["branding"] !== undefined ? { branding: parseBranding(value["branding"], path) } : {}),
     ...(value["maxUploadBytes"] !== undefined ? { maxUploadBytes: parseMaxUploadBytes(value["maxUploadBytes"], "maxUploadBytes", path) } : {}),
     ...(value["spawnSessions"] !== undefined ? { spawnSessions: parseSpawnSessions(value["spawnSessions"], path) } : {}),
     ...(value["subsessions"] !== undefined ? { subsessions: parseSubsessions(value["subsessions"], path) } : {}),
   };
+}
+
+function parseBranding(value: unknown, path: string): NonNullable<PiWebConfigValues["branding"]> {
+  if (!isRecord(value) || Array.isArray(value)) throw new Error(`PI WEB config branding must be an object: ${path}`);
+  return {
+    ...(value["siteName"] === undefined ? {} : { siteName: parseOptionalBrandingString(value["siteName"], "siteName", path) }),
+    ...(value["siteTitle"] === undefined ? {} : { siteTitle: parseOptionalBrandingString(value["siteTitle"], "siteTitle", path) }),
+    ...(value["siteShortName"] === undefined ? {} : { siteShortName: parseOptionalBrandingString(value["siteShortName"], "siteShortName", path) }),
+    ...(value["description"] === undefined ? {} : { description: parseOptionalBrandingString(value["description"], "description", path) }),
+    ...(value["logoUrl"] === undefined ? {} : { logoUrl: parseOptionalBrandingString(value["logoUrl"], "logoUrl", path) }),
+    ...(value["faviconUrl"] === undefined ? {} : { faviconUrl: parseOptionalBrandingString(value["faviconUrl"], "faviconUrl", path) }),
+    ...(value["appleTouchIconUrl"] === undefined ? {} : { appleTouchIconUrl: parseOptionalBrandingString(value["appleTouchIconUrl"], "appleTouchIconUrl", path) }),
+  };
+}
+
+function parseOptionalBrandingString(value: unknown, key: string, path: string): string {
+  if (typeof value !== "string" || value.trim() === "") throw new Error(`PI WEB config branding ${key} must be a non-empty string: ${path}`);
+  return value.trim();
 }
 
 function parseMaxUploadBytes(value: unknown, key: string, path = "environment"): number {
@@ -242,5 +266,28 @@ function isNonEmptyStringArray(value: unknown): value is string[] {
 
 export function examplePiWebConfig(config: PiWebConfig = {}): string {
   return `${JSON.stringify({ host: config.host ?? "127.0.0.1", port: config.port ?? 8504, allowedHosts: config.allowedHosts ?? [] }, null, 2)}\n`;
+}
+
+export function resolvedPiWebBranding(config: PiWebConfig = {}): {
+  siteName: string;
+  siteTitle: string;
+  siteShortName: string;
+  description: string;
+  logoUrl?: string;
+  faviconUrl?: string;
+  appleTouchIconUrl?: string;
+} {
+  const branding = config.branding ?? {};
+  const siteName = branding.siteName ?? DEFAULT_SITE_NAME;
+  const siteTitle = branding.siteTitle ?? siteName;
+  return {
+    siteName,
+    siteTitle,
+    siteShortName: branding.siteShortName ?? siteName,
+    description: branding.description ?? DEFAULT_SITE_DESCRIPTION,
+    ...(branding.logoUrl === undefined ? {} : { logoUrl: branding.logoUrl }),
+    ...(branding.faviconUrl === undefined ? {} : { faviconUrl: branding.faviconUrl }),
+    ...(branding.appleTouchIconUrl === undefined ? {} : { appleTouchIconUrl: branding.appleTouchIconUrl }),
+  };
 }
 

@@ -96,6 +96,7 @@ export interface PiWebConfigValues {
   allowedHosts?: string[] | true;
   shortcuts?: PiWebShortcutConfig;
   plugins?: PiWebPluginConfigMap;
+  branding?: PiWebBranding;
   /** Maximum accepted HTTP request body size in bytes (uploads/attachments). */
   maxUploadBytes?: number;
   /** When true, LLMs can start new sessions via the spawn_session tool. */
@@ -110,6 +111,23 @@ export interface PiWebConfigValues {
 }
 
 export type PiWebPluginScope = "bundled" | "local" | "user" | "project";
+
+export interface PiWebBranding {
+  /** Primary site/app name shown in UI labels and nav. */
+  siteName?: string;
+  /** Optional browser title override; defaults to siteName. */
+  siteTitle?: string;
+  /** Optional compact name for manifest short_name. */
+  siteShortName?: string;
+  /** Optional manifest/metadata description. */
+  description?: string;
+  /** Optional sidebar logo image URL. */
+  logoUrl?: string;
+  /** Optional favicon URL for the browser tab icon. */
+  faviconUrl?: string;
+  /** Optional Apple touch icon URL. */
+  appleTouchIconUrl?: string;
+}
 
 export interface PiWebPluginInfo {
   id: string;
