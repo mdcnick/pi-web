@@ -519,6 +519,100 @@ describe("buildApp", () => {
     }
   });
 
+  it("serves Jarvis standalone and embedded surfaces", async () => {
+    const standalone = await app.inject({ method: "GET", url: "/jarvis" });
+    const embedded = await app.inject({ method: "GET", url: `/jarvis?embedded=1&cwd=${encodeURIComponent(projectDir)}` });
+
+    expect(standalone.statusCode).toBe(200);
+    expect(standalone.headers["content-type"]).toContain("text/html");
+    expect(standalone.body).toContain("JARVIS // central command");
+    expect(embedded.statusCode).toBe(200);
+    expect(embedded.body).toContain("body.embedded");
+    expect(embedded.body).toContain("params.get('cwd')");
+  });
+
+  it("creates Jarvis tasks and rejects unconfigured or oversized transcription uploads", async () => {
+    const taskResponse = await app.inject({ method: "POST", url: "/api/jarvis/command", payload: { text: "create task review Jarvis", cwd: projectDir } });
+    const tasksResponse = await app.inject({ method: "GET", url: "/api/jarvis/tasks" });
+    const unconfiguredTranscribeResponse = await app.inject({ method: "POST", url: "/api/jarvis/transcribe", payload: { audioBase64: Buffer.from("audio").toString("base64"), mimeType: "audio/webm" } });
+    const tooLargeAudio = Buffer.alloc(15 * 1024 * 1024 + 1).toString("base64");
+    const oversizedTranscribeResponse = await app.inject({ method: "POST", url: "/api/jarvis/transcribe", payload: { audioBase64: tooLargeAudio, mimeType: "audio/webm" } });
+
+    expect(taskResponse.statusCode).toBe(200);
+    expect(taskResponse.json()).toMatchObject({ mode: "task", details: { status: "ready" } });
+    expect(tasksResponse.statusCode).toBe(200);
+    expect(tasksResponse.json<{ tasks: { title: string; cwd: string }[] }>().tasks[0]).toMatchObject({ title: "review Jarvis", cwd: projectDir });
+    expect(unconfiguredTranscribeResponse.statusCode).toBe(501);
+    expect(unconfiguredTranscribeResponse.json()).toEqual({ error: "Jarvis audio recording is working, but transcription is not configured. Set PI_WEB_JARVIS_TRANSCRIBE_COMMAND for a local transcriber, set PI_WEB_JARVIS_TRANSCRIBE_PROVIDER=assemblyai with ASSEMBLYAI_API_KEY after approving AssemblyAI calls, or set PI_WEB_JARVIS_TRANSCRIBE_PROVIDER=openai with OPENAI_API_KEY after approving paid transcription calls." });
+    expect(oversizedTranscribeResponse.statusCode).toBe(413);
+  });
+
+  it("transcribes Jarvis audio with AssemblyAI when configured", async () => {
+    const previousProvider = process.env["PI_WEB_JARVIS_TRANSCRIBE_PROVIDER"];
+    const previousKey = process.env["ASSEMBLYAI_API_KEY"];
+    const previousBaseUrl = process.env["PI_WEB_JARVIS_ASSEMBLYAI_BASE_URL"];
+    const previousPollMs = process.env["PI_WEB_JARVIS_ASSEMBLYAI_POLL_MS"];
+    process.env["PI_WEB_JARVIS_TRANSCRIBE_PROVIDER"] = "assemblyai";
+    process.env["ASSEMBLYAI_API_KEY"] = "test-key";
+    process.env["PI_WEB_JARVIS_ASSEMBLYAI_BASE_URL"] = "https://assembly.test";
+    process.env["PI_WEB_JARVIS_ASSEMBLYAI_POLL_MS"] = "1";
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === "https://assembly.test/v2/upload") {
+        expect(init?.headers).toMatchObject({ authorization: "test-key" });
+        return Promise.resolve(Response.json({ upload_url: "https://cdn.assembly.test/audio" }));
+      }
+      if (url === "https://assembly.test/v2/transcript") {
+        if (typeof init?.body !== "string") throw new Error("Expected JSON body");
+        expect(JSON.parse(init.body)).toEqual({ audio_url: "https://cdn.assembly.test/audio", speech_models: ["universal-3-pro", "universal-2"] });
+        return Promise.resolve(Response.json({ id: "tx_123", status: "queued" }));
+      }
+      if (url === "https://assembly.test/v2/transcript/tx_123") return Promise.resolve(Response.json({ id: "tx_123", status: "completed", text: "open the pod bay doors" }));
+      return Promise.resolve(Response.json({ error: "unexpected url" }, { status: 404 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const response = await app.inject({ method: "POST", url: "/api/jarvis/transcribe", payload: { audioBase64: Buffer.from("audio").toString("base64"), mimeType: "audio/webm" } });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ text: "open the pod bay doors" });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.unstubAllGlobals();
+      restoreEnv("PI_WEB_JARVIS_TRANSCRIBE_PROVIDER", previousProvider);
+      restoreEnv("ASSEMBLYAI_API_KEY", previousKey);
+      restoreEnv("PI_WEB_JARVIS_ASSEMBLYAI_BASE_URL", previousBaseUrl);
+      restoreEnv("PI_WEB_JARVIS_ASSEMBLYAI_POLL_MS", previousPollMs);
+    }
+  });
+
+  it("keeps Jarvis task APIs behind workspace auth", async () => {
+    const policyPath = join(tempDir, "jarvis-access.json");
+    await writeFile(policyPath, JSON.stringify({ admins: ["user_admin"], users: {} }));
+    const authApp = await buildApp({
+      projects: new ProjectService(new ProjectStore(join(tempDir, "jarvis-projects.json"))),
+      workspaces: new WorkspaceService(),
+      sessionDaemon: fakeSessionDaemon(),
+      workspaceAccess: new WorkspaceAccessController({
+        path: policyPath,
+        env: { PI_WEB_WORKSPACE_AUTH: "true", PI_WEB_TRUST_AUTH_HEADERS: "true" },
+      }),
+      clientDist: false,
+      logger: false,
+    });
+    try {
+      const blocked = await authApp.inject({ method: "GET", url: "/api/jarvis/tasks" });
+      const allowed = await authApp.inject({ method: "GET", url: "/api/jarvis/tasks", headers: { "x-pi-web-user-id": "user_admin" } });
+
+      expect(blocked.statusCode).toBe(401);
+      expect(blocked.json()).toEqual({ error: "Authentication required" });
+      expect(allowed.statusCode).toBe(200);
+      expect(allowed.json<{ tasks: unknown[] }>()).toEqual({ tasks: [] });
+    } finally {
+      await authApp.close();
+    }
+  });
+
   it("returns stable errors for invalid project requests", async () => {
     const addResponse = await app.inject({
       method: "POST",
@@ -621,4 +715,9 @@ function fakeRemoteClient(overrides: Partial<MachineClient>): MachineClient {
     connectWebSocket: () => { throw new Error("WebSocket not configured for test"); },
     ...overrides,
   };
+}
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) Reflect.deleteProperty(process.env, name);
+  else process.env[name] = value;
 }
