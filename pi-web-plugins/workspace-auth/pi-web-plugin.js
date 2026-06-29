@@ -113,7 +113,7 @@ class WorkspaceAuthDashboard extends HTMLElement {
   renderUserForm(user, policy) {
     return `
       <div class="row"><strong>Edit user</strong><button id="save-user" class="primary">Save user</button><button id="delete-user" class="danger">Delete</button></div>
-      <p class="muted">Use the Clerk user ID as the user ID. Add one workspace path per line.</p>
+      <p class="muted">Use the Better Auth user ID as the user ID. Legacy Clerk user IDs still work until the auth runtime is fully migrated. Add one workspace path per line.</p>
       <label>User ID<input id="user-id" value="${escapeAttr(user.id)}" /></label>
       <label>Label<input id="user-label" value="${escapeAttr(user.label ?? "")}" /></label>
       <label>Email<input id="user-email" value="${escapeAttr(user.email ?? "")}" /></label>
@@ -145,7 +145,7 @@ class WorkspaceAuthDashboard extends HTMLElement {
   }
 
   addUser() {
-    const id = prompt("Clerk user ID", "user_");
+    const id = prompt("Better Auth user ID", "user_");
     if (id === null || id.trim() === "") return;
     const userId = id.trim();
     const policy = this.policyCopy();
@@ -198,7 +198,7 @@ class WorkspaceAuthDashboard extends HTMLElement {
 
   copyEnv() {
     const path = this.state.settings?.path ?? POLICY_PATH;
-    const text = `export PI_WEB_WORKSPACE_AUTH=true\nexport PI_WEB_WORKSPACE_ACCESS=${path}\n# export CLERK_PUBLISHABLE_KEY=pk_test_...\n# export PI_WEB_CLERK_ISSUER=https://your-clerk-domain\n# export PI_WEB_TRUST_AUTH_HEADERS=true`;
+    const text = `export PI_WEB_WORKSPACE_AUTH=true\nexport PI_WEB_WORKSPACE_ACCESS=${path}\n\n# Better Auth infra credentials stay server-side. Do not expose these in browser code or git.\n# export BETTER_AUTH_API_URL=https://api.better-auth.com\n# export BETTER_AUTH_KV_URL=https://kv.better-auth.com\n# export BETTER_AUTH_API_KEY=replace-with-private-key\n\n# Legacy Clerk fallback until PI WEB browser auth is fully migrated to Better Auth.\n# export CLERK_PUBLISHABLE_KEY=pk_test_...\n# export PI_WEB_CLERK_ISSUER=https://your-clerk-domain\n\n# Only enable behind a trusted proxy that strips spoofed client headers.\n# export PI_WEB_TRUST_AUTH_HEADERS=true`;
     navigator.clipboard?.writeText(text).catch(() => undefined);
   }
 }
@@ -237,7 +237,7 @@ const plugin = {
         {
           id: "workspace-auth.open",
           title: "Open Workspace Auth Panel",
-          description: "Configure Clerk/workspace policy users and Telegram links.",
+          description: "Configure Better Auth/workspace policy users and Telegram links.",
           group: "Access Control",
           enabled: (context) => context.state.selectedWorkspace !== undefined,
           run: (context) => context.selectWorkspaceTool("workspace-auth:workspace.auth"),

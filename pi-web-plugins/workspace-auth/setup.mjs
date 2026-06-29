@@ -13,17 +13,20 @@ const rl = readline.createInterface({ input, output });
 
 try {
   console.log("PI WEB Workspace Auth setup");
-  console.log("This writes an access policy and an optional shell env file. It does not store Clerk secrets.\n");
+  console.log("This writes an access policy and an optional shell env file. Better Auth secrets stay in the private env file, never in git.\n");
 
   const policyPathInput = await ask("Policy path", DEFAULT_POLICY_PATH);
   const policyPath = expandHome(policyPathInput);
   const envPathInput = await ask("Env file path", DEFAULT_ENV_PATH);
   const envPath = expandHome(envPathInput);
-  const adminUserId = await ask("Your Clerk user ID / admin user ID", "user_admin");
+  const adminUserId = await ask("Your Better Auth user ID / admin user ID", "user_admin");
   const workspace = await ask("First allowed workspace path", process.cwd());
-  const publishableKey = await ask("Clerk publishable key (blank to derive from issuer)", "");
-  const issuer = await ask("Clerk issuer URL (blank to skip for now)", "");
-  const audience = await ask("Clerk audience (blank unless configured in Clerk)", "");
+  const betterAuthApiUrl = await ask("Better Auth API URL (blank to skip for now)", "");
+  const betterAuthKvUrl = await ask("Better Auth KV URL (blank to skip for now)", "");
+  const betterAuthApiKey = await ask("Better Auth API key (blank to skip; input is visible)", "");
+  const publishableKey = await ask("Legacy Clerk publishable key (blank to derive from issuer)", "");
+  const issuer = await ask("Legacy Clerk issuer URL (blank to skip)", "");
+  const audience = await ask("Legacy Clerk audience (blank unless configured in Clerk)", "");
 
   if (!existsSync(policyPath)) {
     await writeJson(policyPath, {
@@ -47,6 +50,10 @@ try {
     "export PI_WEB_WORKSPACE_AUTH=true",
     `export PI_WEB_WORKSPACE_ACCESS=${shellQuote(policyPath)}`,
   ];
+  if (betterAuthApiUrl !== "") lines.push(`export BETTER_AUTH_API_URL=${shellQuote(betterAuthApiUrl)}`);
+  if (betterAuthKvUrl !== "") lines.push(`export BETTER_AUTH_KV_URL=${shellQuote(betterAuthKvUrl)}`);
+  if (betterAuthApiKey !== "") lines.push(`export BETTER_AUTH_API_KEY=${shellQuote(betterAuthApiKey)}`);
+  lines.push("# Legacy Clerk fallback until PI WEB browser auth is fully migrated to Better Auth.");
   if (publishableKey !== "") lines.push(`export CLERK_PUBLISHABLE_KEY=${shellQuote(publishableKey)}`);
   if (issuer !== "") lines.push(`export CLERK_ISSUER=${shellQuote(issuer)}`);
   if (audience !== "") lines.push(`export CLERK_AUDIENCE=${shellQuote(audience)}`);
@@ -59,7 +66,7 @@ try {
   console.log("\nNext:");
   console.log(`  source ${envPath}`);
   console.log("  pi-web-server");
-  console.log("\nAdd more users by editing the policy file. Clerk user IDs are the keys under users.");
+  console.log("\nAdd more users by editing the policy file. Better Auth user IDs are the keys under users.");
 } finally {
   rl.close();
 }
