@@ -4,6 +4,12 @@
   "machineId": "local",
   "defaultCwd": "/absolute/path/to/default/workspace",
   "workspaceAccessPath": "~/.pi-web/workspace-access.json",
+  "agentRouting": {
+    "enabled": true,
+    "mode": "agent-channel",
+    "layerName": "telegram-gateway",
+    "instructions": "Use PI WEB subsession/agent orchestration for broad research, implementation, or review tasks when those tools are available. Keep Telegram replies concise and never expose secrets."
+  },
   "sessionBots": [
     {
       "id": "friend-session-1",

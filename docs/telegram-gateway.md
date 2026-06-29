@@ -16,13 +16,16 @@ It is designed for private deployments: the gateway uses Telegram long polling, 
 Telegram user
   -> Telegram Bot API
   -> gateway.mjs long polling
+  -> optional agentRouting channel wrapper
   -> PI WEB /api/machines/<machine>/sessions
-  -> Pi Coding Agent session
+  -> Pi Coding Agent session/subsessions
   -> gateway.mjs
   -> Telegram Bot API
 ```
 
 Each Telegram user/chat gets a stable isolated PI WEB session mapping in the gateway state file. `/new` creates a fresh PI WEB session.
+
+When `agentRouting.enabled` is set in the gateway config, the gateway becomes a Telegram channel adapter for the layered automation system. Normal Telegram messages are wrapped with Telegram user/chat identity, linked PI WEB workspace, bot label, and instructions that tell the PI WEB session to use available agent/subsession tools for broad research, implementation, and review tasks. This does not replace Better Auth or workspace policy; it only adds channel context after the Telegram user has been allowed.
 
 ## Quick start
 
@@ -44,3 +47,4 @@ Reload PI WEB and open the **Telegram** workspace tab for in-app instructions.
 - Admin-only `/setcwd` controls workspace routing.
 - Secrets are not required in plugin source or config if `TELEGRAM_BOT_TOKEN` is used.
 - No public webhook listener is opened.
+- `agentRouting` is prompt-layer orchestration guidance only; it must not grant broader workspace, tool, container, or deployment access.

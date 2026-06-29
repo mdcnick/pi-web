@@ -18,6 +18,7 @@ Long polling is intentional: your PI WEB can stay private on `127.0.0.1`, Tailsc
 - Legacy single-bot mode still works with `TELEGRAM_BOT_TOKEN`, but the in-app UI is optimized for per-user bot-token routing.
 - The gateway talks to PI WEB's normal local API; it does not expose a public HTTP server.
 - `/setcwd` is admin-only because it controls which workspace future sessions start in.
+- Optional `agentRouting` wraps Telegram messages with channel/actor/workspace context so the PI WEB session can use agent/subsession orchestration while keeping Telegram access scoped.
 
 ## Install as a local PI WEB plugin
 
@@ -50,6 +51,7 @@ Set:
 
 - `piWebBaseUrl`: your PI WEB web/API URL, usually `http://127.0.0.1:8504`.
 - `defaultCwd`: fallback absolute workspace path.
+- `agentRouting.enabled`: set `true` to make Telegram act as an agent-channel adapter. The gateway then wraps each normal Telegram message with channel identity, linked workspace, and instructions to use PI WEB subsession/agent tools for broad tasks when available.
 - `sessionBots[]`: internal config rows for allowed Telegram users and their attached bot tokens.
   - `allowedTelegramUserIds`: the actual numeric Telegram user IDs allowed through that row.
   - `telegramBotToken`: the BotFather token for the bot that user/session should use.
@@ -57,6 +59,8 @@ Set:
   - `sessionId`: optional existing PI WEB session ID; leave blank to let the gateway create/remember one.
 
 Telegram-bound sessions are automatically protected: the gateway locks, pins, makes permanent, and blocks terminal access for configured/remembered session IDs when it starts or reloads, and again before forwarding user prompts.
+
+`agentRouting` is intentionally prompt-layer routing, not an auth bypass. Better Auth/workspace policy still decides who can access the workspace; `agentRouting` only tells the already-authorized PI WEB session that the request came from Telegram and should be handled as part of the layered automation system.
 
 Start one gateway process; it polls all configured user/bot rows and watches the config for changes, so adding another Telegram user/bot in the UI does not require manually restarting the gateway:
 

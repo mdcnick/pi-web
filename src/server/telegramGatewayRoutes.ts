@@ -17,6 +17,13 @@ interface TelegramGatewayUserRoute {
   sessionId?: string | undefined;
 }
 
+interface TelegramGatewayAgentRoutingConfig {
+  enabled?: boolean | undefined;
+  mode?: string | undefined;
+  layerName?: string | undefined;
+  instructions?: string | undefined;
+}
+
 interface TelegramGatewaySessionBotConfig {
   id?: string | undefined;
   label?: string | undefined;
@@ -26,6 +33,7 @@ interface TelegramGatewaySessionBotConfig {
   adminTelegramUserIds?: number[] | undefined;
   cwd?: string | undefined;
   sessionId?: string | undefined;
+  agentRouting?: TelegramGatewayAgentRoutingConfig | undefined;
   enabled?: boolean | undefined;
 }
 
@@ -40,6 +48,7 @@ interface TelegramGatewayConfigFile {
   adminTelegramUserIds?: number[] | undefined;
   userRoutes?: Record<string, TelegramGatewayUserRoute> | undefined;
   sessionBots?: TelegramGatewaySessionBotConfig[] | undefined;
+  agentRouting?: TelegramGatewayAgentRoutingConfig | undefined;
   statePath?: string | undefined;
   pollTimeoutSeconds?: number | undefined;
   requestTimeoutMs?: number | undefined;
@@ -269,6 +278,7 @@ function parseSettingsRequest(body: TelegramGatewaySettingsRequest | undefined, 
     allowedTelegramUserIds: [],
     adminTelegramUserIds: [],
     userRoutes: {},
+    ...(existing.agentRouting === undefined ? {} : { agentRouting: existing.agentRouting }),
     sessionBots: users.map((user, index) => {
       const existingBot = findExistingSessionBot(existing, user.botId);
       const id = user.botId ?? sessionBotId(user, index);
@@ -284,6 +294,7 @@ function parseSettingsRequest(body: TelegramGatewaySettingsRequest | undefined, 
         adminTelegramUserIds: user.admin === true ? allowedTelegramUserIds : [],
         cwd: user.cwd ?? defaultCwd,
         ...(user.sessionId === undefined ? {} : { sessionId: user.sessionId }),
+        ...(existingBot?.agentRouting === undefined ? {} : { agentRouting: existingBot.agentRouting }),
         enabled: user.enabled !== false,
       };
     }),
@@ -366,6 +377,7 @@ function defaultGatewayConfig(): TelegramGatewayConfigFile {
     adminTelegramUserIds: [],
     userRoutes: {},
     sessionBots: [],
+    agentRouting: { enabled: false, mode: "agent-channel", layerName: "telegram-gateway" },
     statePath: DEFAULT_STATE_PATH,
     pollTimeoutSeconds: 25,
     requestTimeoutMs: 30000,
@@ -391,6 +403,7 @@ function normalizeGatewayConfig(value: unknown): TelegramGatewayConfigFile {
     adminTelegramUserIds: numberArray(value["adminTelegramUserIds"] ?? [], "adminTelegramUserIds"),
     userRoutes: parseUserRoutes(value["userRoutes"]),
     sessionBots: parseSessionBots(value["sessionBots"]),
+    agentRouting: parseAgentRouting(value["agentRouting"]),
     statePath: optionalString(value["statePath"]) ?? DEFAULT_STATE_PATH,
     pollTimeoutSeconds: positiveNumber(value["pollTimeoutSeconds"], 25),
     requestTimeoutMs: positiveNumber(value["requestTimeoutMs"], 30000),
@@ -412,6 +425,20 @@ function parseUserRoutes(value: unknown): Record<string, TelegramGatewayUserRout
   }));
 }
 
+function parseAgentRouting(value: unknown): TelegramGatewayAgentRoutingConfig {
+  if (value === undefined) return { enabled: false, mode: "agent-channel", layerName: "telegram-gateway" };
+  if (!isRecord(value)) throw new Error("agentRouting must be an object");
+  const mode = optionalString(value["mode"]);
+  const layerName = optionalString(value["layerName"]);
+  const instructions = optionalString(value["instructions"]);
+  return {
+    enabled: value["enabled"] === true,
+    ...(mode === undefined ? {} : { mode }),
+    ...(layerName === undefined ? {} : { layerName }),
+    ...(instructions === undefined ? {} : { instructions }),
+  };
+}
+
 function parseSessionBots(value: unknown): TelegramGatewaySessionBotConfig[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) throw new Error("sessionBots must be an array");
@@ -430,7 +457,8 @@ function parseSessionBots(value: unknown): TelegramGatewaySessionBotConfig[] {
     const adminTelegramUserIds = numberArray(item["adminTelegramUserIds"] ?? [], `sessionBots.${String(index)}.adminTelegramUserIds`);
     const cwd = item["cwd"] === undefined || item["cwd"] === "" ? undefined : normalizeRequestCwd(requireAbsoluteString(item["cwd"], `sessionBots.${String(index)}.cwd`));
     const sessionId = optionalString(item["sessionId"]);
-    return { id, ...(label === undefined ? {} : { label }), telegramBotToken, ...(telegramUserId === undefined ? {} : { telegramUserId }), allowedTelegramUserIds, adminTelegramUserIds, ...(cwd === undefined ? {} : { cwd }), ...(sessionId === undefined ? {} : { sessionId }), enabled: item["enabled"] !== false };
+    const agentRouting = item["agentRouting"] === undefined ? undefined : parseAgentRouting(item["agentRouting"]);
+    return { id, ...(label === undefined ? {} : { label }), telegramBotToken, ...(telegramUserId === undefined ? {} : { telegramUserId }), allowedTelegramUserIds, adminTelegramUserIds, ...(cwd === undefined ? {} : { cwd }), ...(sessionId === undefined ? {} : { sessionId }), ...(agentRouting === undefined ? {} : { agentRouting }), enabled: item["enabled"] !== false };
   });
 }
 
