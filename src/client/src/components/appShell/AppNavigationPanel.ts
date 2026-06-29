@@ -205,11 +205,11 @@ export class AppNavigationPanel extends LitElement {
   static override styles = css`
     :host { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
     :host([compact]) { flex: 1 1 auto; }
-    header { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; border-bottom: 1px solid var(--pi-border); }
+    header { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 13px 12px; border-bottom: 1px solid var(--pi-border); }
     header strong { flex: 0 0 auto; }
-    .brand { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+    .brand { display: inline-flex; align-items: center; gap: 9px; min-width: 0; }
     .brand span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .brand img { width: 22px; height: 22px; object-fit: contain; border-radius: 5px; }
+    .brand img { width: 30px; height: 30px; object-fit: contain; border-radius: 7px; }
     machine-switcher { flex: 1 1 auto; min-width: 0; }
     :host([compact]) header { display: none; }
     .header-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
