@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">PiControl mark</title>
+  <desc id="desc">Browser window icon with pi symbol, chart, and sliders.</desc>
+  <defs>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#0b1a2d" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="#ffffff"/>
+  <g transform="translate(46 116)" filter="url(#softShadow)">
+    <rect x="0" y="0" width="420" height="280" rx="34" fill="#ffffff" stroke="#071a2f" stroke-width="13"/>
+    <line x1="6.5" y1="64" x2="413.5" y2="64" stroke="#071a2f" stroke-width="13" stroke-linecap="round"/>
+    <circle cx="52" cy="32" r="11" fill="#071a2f"/>
+    <circle cx="92" cy="32" r="11" fill="#071a2f"/>
+    <circle cx="132" cy="32" r="11" fill="#071a2f"/>
+    <line x1="210" y1="64" x2="210" y2="250" stroke="#071a2f" stroke-width="6" stroke-linecap="round" opacity="0.75"/>
+    <path d="M45 142c8-31 24-41 55-41h91v25h-55l-5 73c-3 36-15 53-43 53-25 0-36-12-32-36l13-90h-6c-19 0-29 9-35 28z" fill="url(#blue)"/>
+    <path d="M89 126h110" stroke="url(#blue)" stroke-width="24" stroke-linecap="round"/>
+    <polyline points="253,144 292,118 326,136 371,100" fill="none" stroke="url(#blue)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="253" cy="144" r="13" fill="url(#blue)"/>
+    <circle cx="292" cy="118" r="13" fill="url(#blue)"/>
+    <circle cx="326" cy="136" r="13" fill="url(#blue)"/>
+    <circle cx="371" cy="100" r="13" fill="url(#blue)"/>
+    <line x1="248" y1="190" x2="380" y2="190" stroke="#24364d" stroke-width="7" stroke-linecap="round"/>
+    <line x1="248" y1="237" x2="380" y2="237" stroke="#24364d" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="317" cy="190" r="22" fill="#fff" stroke="url(#blue)" stroke-width="10"/>
+    <circle cx="317" cy="237" r="22" fill="#fff" stroke="url(#blue)" stroke-width="10"/>
+  </g>
+</svg>
