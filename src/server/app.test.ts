@@ -510,6 +510,48 @@ describe("buildApp", () => {
     }
   });
 
+  it("bootstraps the first PI WEB admin from a Better Auth user", async () => {
+    const policyPath = join(tempDir, "better-auth-bootstrap-admin.json");
+    const fetchMock = vi.fn((input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      expect(url).toBe("https://better-auth.test/api/auth/session");
+      expect(init?.headers).toMatchObject({ authorization: "Bearer first-admin-session" });
+      return Promise.resolve(Response.json({ user: { id: "user_first_admin" } }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const authApp = await buildApp({
+      projects: new ProjectService(new ProjectStore(join(tempDir, "better-auth-bootstrap-projects.json"))),
+      workspaces: new WorkspaceService(),
+      sessionDaemon: fakeSessionDaemon(),
+      workspaceAccess: new WorkspaceAccessController({
+        path: policyPath,
+        env: {
+          PI_WEB_AUTH_PROVIDER: "better-auth",
+          PI_WEB_WORKSPACE_AUTH: "true",
+          BETTER_AUTH_API_URL: "https://better-auth.test",
+          BETTER_AUTH_SESSION_PATH: "/api/auth/session",
+        },
+      }),
+      clientDist: false,
+      logger: false,
+    });
+
+    try {
+      const publicResponse = await authApp.inject({ method: "GET", url: "/api/workspace-access/public" });
+      const bootstrapResponse = await authApp.inject({ method: "POST", url: "/api/workspace-access/bootstrap-admin", headers: { authorization: "Bearer first-admin-session" } });
+      const adminResponse = await authApp.inject({ method: "GET", url: "/api/workspace-access", headers: { authorization: "Bearer first-admin-session" } });
+
+      expect(publicResponse.statusCode).toBe(200);
+      expect(publicResponse.json()).toEqual({ enabled: true, provider: "better-auth", adminBootstrapAvailable: true });
+      expect(bootstrapResponse.statusCode).toBe(200);
+      expect(bootstrapResponse.json()).toMatchObject({ policy: { admins: ["user_first_admin"], users: { user_first_admin: { workspaces: [], telegramUserIds: [] } } } });
+      expect(adminResponse.statusCode).toBe(200);
+    } finally {
+      vi.unstubAllGlobals();
+      await authApp.close();
+    }
+  });
+
   it("authenticates workspace users through better-auth session endpoint", async () => {
     const policyPath = join(tempDir, "better-auth-authenticated-users.json");
     await writeFile(policyPath, JSON.stringify({ admins: [], users: { user_better_auth: { workspaces: [] } } }));

@@ -65,6 +65,21 @@ export class WorkspaceAccessController {
     return this.authProvider.publicSettings(this.enabled);
   }
 
+  adminBootstrapAvailable(): boolean {
+    if (!this.enabled || this.authProvider.kind !== "better-auth") return false;
+    return this.currentPolicy().admins.length === 0;
+  }
+
+  bootstrapAdmin(request: FastifyRequest): WorkspaceAccessPolicy {
+    if (!this.adminBootstrapAvailable()) throw new WorkspaceAccessError(403, "Admin bootstrap is not available");
+    const userId = getRequestUserId(request);
+    if (userId === undefined || userId === "") throw new WorkspaceAccessError(401, "Authentication required");
+    const policy = this.currentPolicy();
+    policy.admins = [userId];
+    policy.users[userId] ??= { id: userId, workspaces: [], telegramUserIds: [] };
+    return this.savePolicy(policy);
+  }
+
   isEnabled(): boolean {
     return this.enabled;
   }

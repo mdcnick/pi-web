@@ -4,6 +4,7 @@ interface WorkspaceAuthPublicResponse {
   enabled: boolean;
   provider: WorkspaceAuthProvider;
   internalAuth?: boolean;
+  adminBootstrapAvailable?: boolean;
 }
 
 const internalAuthStorageKey = "pi-web.internalAuthToken";
@@ -15,6 +16,10 @@ export async function initializeWorkspaceAuth(): Promise<boolean> {
   if (!settings.enabled) return true;
 
   if (settings.provider === "better-auth") {
+    if (settings.adminBootstrapAvailable === true) {
+      renderBetterAuthAdminBootstrap();
+      return false;
+    }
     renderAuthenticatedAppShell();
     return true;
   }
@@ -44,7 +49,8 @@ async function loadWorkspaceAuthSettings(): Promise<WorkspaceAuthPublicResponse>
   if (!isRecord(value) || typeof value["enabled"] !== "boolean") return { enabled: false, provider: "internal" };
   const provider = parseWorkspaceAuthProvider(value["provider"]);
   const internalAuth = value["internalAuth"] === true;
-  return { enabled: value["enabled"], provider, ...(internalAuth ? { internalAuth } : {}) };
+  const adminBootstrapAvailable = value["adminBootstrapAvailable"] === true;
+  return { enabled: value["enabled"], provider, ...(internalAuth ? { internalAuth } : {}), ...(adminBootstrapAvailable ? { adminBootstrapAvailable } : {}) };
 }
 
 function parseWorkspaceAuthProvider(value: unknown): WorkspaceAuthProvider {
@@ -126,6 +132,38 @@ async function submitInternalAuthToken(token: string): Promise<void> {
   }
   clearInternalAuthToken();
   renderInternalSignIn(error);
+}
+
+function renderBetterAuthAdminBootstrap(error?: string): void {
+  const root = authRoot();
+  root.innerHTML = `
+    <div class="pi-auth-card">
+      <strong>Set up PI WEB admin</strong>
+      <p>No PI WEB admin user exists yet. Sign in with Better Auth, then make the current Better Auth user the first PI WEB admin.</p>
+      ${error === undefined ? "" : `<p class="pi-auth-error">${escapeHtml(error)}</p>`}
+      <button id="pi-better-auth-bootstrap-admin" type="button">Make me admin</button>
+    </div>
+  `;
+  const button = root.querySelector("#pi-better-auth-bootstrap-admin");
+  if (!(button instanceof HTMLButtonElement)) return;
+  button.addEventListener("click", () => {
+    void submitBetterAuthAdminBootstrap();
+  });
+}
+
+async function submitBetterAuthAdminBootstrap(): Promise<void> {
+  renderBlockingAuthMessage("Creating PI WEB admin…");
+  try {
+    const response = await fetch("/api/workspace-access/bootstrap-admin", { method: "POST", cache: "no-store" });
+    if (response.ok) {
+      renderAuthenticatedAppShell();
+      return;
+    }
+    const body: unknown = await response.json().catch((): unknown => ({}));
+    renderBetterAuthAdminBootstrap(errorMessage(body) ?? response.statusText);
+  } catch (error) {
+    renderBetterAuthAdminBootstrap(error instanceof Error ? error.message : String(error));
+  }
 }
 
 async function verifyInternalAuthToken(token: string): Promise<string | undefined> {

@@ -79,7 +79,7 @@ class BetterAuthWorkspaceProvider implements WorkspaceAuthProvider {
   }
 
   allowMissingPolicy(): boolean {
-    return false;
+    return true;
   }
 
   publicSettings(enabled: boolean): WorkspaceAuthPublicSettings {

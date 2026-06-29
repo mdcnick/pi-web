@@ -14,6 +14,7 @@ export interface WorkspaceAccessPublicResponse {
   enabled: boolean;
   provider: WorkspaceAuthProviderKind;
   internalAuth?: boolean;
+  adminBootstrapAvailable?: boolean;
 }
 
 export function registerWorkspaceAccessRoutes(app: FastifyInstance, workspaceAccess: WorkspaceAccessController): void {
@@ -39,6 +40,15 @@ export function registerWorkspaceAccessRoutes(app: FastifyInstance, workspaceAcc
       return await reply.code(workspaceAccessErrorStatus(error)).send({ error: error instanceof Error ? error.message : String(error) });
     }
   });
+
+  app.post("/api/workspace-access/bootstrap-admin", async (request, reply) => {
+    try {
+      workspaceAccess.bootstrapAdmin(request);
+      return workspaceAccessSettings(workspaceAccess);
+    } catch (error) {
+      return await reply.code(workspaceAccessErrorStatus(error)).send({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
 }
 
 function workspaceAccessSettings(workspaceAccess: WorkspaceAccessController): WorkspaceAccessSettingsResponse {
@@ -52,5 +62,7 @@ function workspaceAccessSettings(workspaceAccess: WorkspaceAccessController): Wo
 }
 
 function workspaceAccessPublicSettings(workspaceAccess: WorkspaceAccessController): WorkspaceAccessPublicResponse {
-  return workspaceAccess.publicAuthSettings();
+  const settings = workspaceAccess.publicAuthSettings();
+  const adminBootstrapAvailable = workspaceAccess.adminBootstrapAvailable();
+  return { ...settings, ...(adminBootstrapAvailable ? { adminBootstrapAvailable } : {}) };
 }
