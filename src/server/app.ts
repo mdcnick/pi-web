@@ -10,7 +10,7 @@ import { WorkspaceService } from "./workspaces/workspaceService.js";
 import { listFileSuggestions, listPathSuggestions } from "./workspaces/fileSuggestions.js";
 import { normalizeRequestCwd } from "./workingDirectory.js";
 import { listDirectorySuggestions } from "./projects/directorySuggestions.js";
-import { SessionDaemonClient } from "../sessiond/sessionDaemonClient.js";
+import { PerUserSessionDaemonClient, SessionDaemonClient } from "../sessiond/sessionDaemonClient.js";
 import { registerSessionProxyRoutes, type SessionProxyDaemon } from "./sessiond/sessionProxyRoutes.js";
 import { registerWorkspaceExplorerRoutes } from "./workspaceExplorerRoutes.js";
 import { registerGitRoutes } from "./gitRoutes.js";
@@ -125,7 +125,7 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
   const projects = deps.projects ?? new ProjectService(new ProjectStore());
   const workspaces = deps.workspaces ?? new WorkspaceService();
   const piWebPlugins = deps.piWebPlugins ?? new PiWebPluginService();
-  const sessionDaemon = deps.sessionDaemon ?? new SessionDaemonClient();
+  const sessionDaemon = deps.sessionDaemon ?? defaultSessionDaemonClient();
   const workspaceAccess = deps.workspaceAccess ?? new WorkspaceAccessController();
   const piWebStatusCache = createPiWebStatusCache(() => getPiWebStatus(sessionDaemon), {
     onError: (error) => { app.log.warn({ err: error }, "failed to refresh PI WEB status cache"); },
@@ -198,4 +198,11 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
   }
 
   return app;
+}
+
+function defaultSessionDaemonClient(): SessionProxyDaemon {
+  if (process.env["PI_WEB_SESSIOND_PER_USER"] === "1" || process.env["PI_WEB_SESSIOND_PER_USER"]?.toLowerCase() === "true") {
+    return new PerUserSessionDaemonClient();
+  }
+  return new SessionDaemonClient();
 }
