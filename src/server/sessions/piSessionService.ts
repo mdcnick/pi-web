@@ -34,6 +34,7 @@ import type { WorkspaceActivityService } from "../activity/workspaceActivityServ
 import { createSpawnSessionToolDefinition, type SpawnSessionInvocation, type SpawnSessionResult } from "./spawnSessionTool.js";
 import { createSubsessionToolDefinitions, type SpawnSubsessionInvocation, type SpawnSubsessionResult, type SubsessionCheckResult, type SubsessionReadQuery, type SubsessionReadResult, type SubsessionStatus, type SubsessionSummary, type SubsessionToolDeps } from "./spawnSubsessionTool.js";
 import { buildTranscriptView } from "./subsessionTranscript.js";
+import { createWebSearchToolDefinition, type WebSearchToolDeps } from "./webSearchTool.js";
 import type { SpawnTargetDecision, SpawnTargetResolver } from "./spawnTargetResolver.js";
 
 /**
@@ -211,13 +212,14 @@ function defaultCreateAgentRuntime(createRuntime: CreateAgentSessionRuntimeFacto
 
 type SpawnSessionFn = (input: SpawnSessionInvocation) => Promise<SpawnSessionResult>;
 
-function createDefaultRuntimeFactory(authStorage: AuthStorage, modelRegistry: ModelRegistryInstance, spawn?: SpawnSessionFn, subsessions?: SubsessionToolDeps): CreateAgentSessionRuntimeFactory {
+function createDefaultRuntimeFactory(authStorage: AuthStorage, modelRegistry: ModelRegistryInstance, spawn?: SpawnSessionFn, subsessions?: SubsessionToolDeps, webSearch?: WebSearchToolDeps): CreateAgentSessionRuntimeFactory {
   return async ({ cwd, agentDir, sessionManager, sessionStartEvent }) => {
     const services = await createAgentSessionServices({ cwd, agentDir, authStorage, modelRegistry });
     const customTools = [
       createPiWebEditToolDefinition(cwd),
       ...(spawn === undefined ? [] : [createSpawnSessionToolDefinition(cwd, { spawn })]),
       ...(subsessions === undefined ? [] : createSubsessionToolDefinitions(cwd, subsessions)),
+      ...(webSearch === undefined ? [] : [createWebSearchToolDefinition(webSearch)]),
     ];
     const options = sessionStartEvent === undefined
       ? { services, sessionManager, customTools }
@@ -274,6 +276,8 @@ export interface PiSessionServiceDependencies {
    * main without being exposed in releases.
    */
   subsessionsEnabled?: boolean;
+  /** Optional configured web-search backend; when omitted, no web_search tool is registered. */
+  webSearch?: WebSearchToolDeps;
   /** Structured logger for notable runtime events (e.g. spawns). */
   logger?: PiSessionLogger;
 }
@@ -326,6 +330,7 @@ export class PiSessionService {
         check: (parentSessionId, sessionId) => this.checkSubsession(parentSessionId, sessionId),
         read: (parentSessionId, sessionId, query) => this.readSubsession(parentSessionId, sessionId, query),
       },
+      deps.webSearch,
     );
     this.createAgentRuntime = deps.createAgentRuntime ?? defaultCreateAgentRuntime;
     this.workspaceActivity = deps.workspaceActivity;

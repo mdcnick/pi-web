@@ -18,6 +18,7 @@
     "extensions",
     "docs/plugins.md",
     "docs/telegram-gateway.md",
+    "docs/browser-tools.md",
     "docs/assets",
     "plugin-api.d.ts",
     "plugin-api/unstable.d.ts"

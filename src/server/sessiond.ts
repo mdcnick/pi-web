@@ -11,6 +11,7 @@ import { registerAuthRoutes } from "./sessions/authRoutes.js";
 import { PiSessionService } from "./sessions/piSessionService.js";
 import { registerSessionRoutes } from "./sessions/sessionRoutes.js";
 import { ProjectScopedSpawnTargetResolver } from "./sessions/spawnTargetResolver.js";
+import { webSearchDepsFromEnv } from "./sessions/webSearchTool.js";
 import { ProjectService } from "./projects/projectService.js";
 import { ProjectStore } from "./storage/projectStore.js";
 import { WorkspaceService } from "./workspaces/workspaceService.js";
@@ -31,11 +32,13 @@ const { config } = effectivePiWebConfig();
 const spawnTargets = spawnSessionsEnabled(process.env, config)
   ? new ProjectScopedSpawnTargetResolver({ projects: new ProjectService(new ProjectStore()), workspaces: new WorkspaceService() })
   : undefined;
+const webSearch = webSearchDepsFromEnv(process.env);
 const sessions = new PiSessionService(eventHub, {
   modelRegistry: auth.modelRegistry,
   workspaceActivity,
   logger: app.log,
   ...(spawnTargets === undefined ? {} : { spawnTargets }),
+  ...(webSearch === undefined ? {} : { webSearch }),
   subsessionsEnabled: spawnTargets !== undefined && subsessionsEnabled(process.env, config),
 });
 auth.subscribe((change) => { sessions.applyAuthChange(change); });
