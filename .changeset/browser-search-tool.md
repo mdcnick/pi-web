@@ -2,4 +2,4 @@
 "@jmfederico/pi-web": minor
 ---
 
-Add an opt-in SearXNG-backed `web_search` tool for Pi sessions.
+Add opt-in browser/search tools for Pi sessions: SearXNG-backed `web_search` plus Steel-backed `browser_extract` and `browser_screenshot`.

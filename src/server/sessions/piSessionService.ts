@@ -35,6 +35,7 @@ import { createSpawnSessionToolDefinition, type SpawnSessionInvocation, type Spa
 import { createSubsessionToolDefinitions, type SpawnSubsessionInvocation, type SpawnSubsessionResult, type SubsessionCheckResult, type SubsessionReadQuery, type SubsessionReadResult, type SubsessionStatus, type SubsessionSummary, type SubsessionToolDeps } from "./spawnSubsessionTool.js";
 import { buildTranscriptView } from "./subsessionTranscript.js";
 import { createWebSearchToolDefinition, type WebSearchToolDeps } from "./webSearchTool.js";
+import { createSteelBrowserToolDefinitions, type SteelBrowserToolDeps } from "./steelBrowserTools.js";
 import type { SpawnTargetDecision, SpawnTargetResolver } from "./spawnTargetResolver.js";
 
 /**
@@ -212,7 +213,7 @@ function defaultCreateAgentRuntime(createRuntime: CreateAgentSessionRuntimeFacto
 
 type SpawnSessionFn = (input: SpawnSessionInvocation) => Promise<SpawnSessionResult>;
 
-function createDefaultRuntimeFactory(authStorage: AuthStorage, modelRegistry: ModelRegistryInstance, spawn?: SpawnSessionFn, subsessions?: SubsessionToolDeps, webSearch?: WebSearchToolDeps): CreateAgentSessionRuntimeFactory {
+function createDefaultRuntimeFactory(authStorage: AuthStorage, modelRegistry: ModelRegistryInstance, spawn?: SpawnSessionFn, subsessions?: SubsessionToolDeps, webSearch?: WebSearchToolDeps, steelBrowser?: SteelBrowserToolDeps): CreateAgentSessionRuntimeFactory {
   return async ({ cwd, agentDir, sessionManager, sessionStartEvent }) => {
     const services = await createAgentSessionServices({ cwd, agentDir, authStorage, modelRegistry });
     const customTools = [
@@ -220,6 +221,7 @@ function createDefaultRuntimeFactory(authStorage: AuthStorage, modelRegistry: Mo
       ...(spawn === undefined ? [] : [createSpawnSessionToolDefinition(cwd, { spawn })]),
       ...(subsessions === undefined ? [] : createSubsessionToolDefinitions(cwd, subsessions)),
       ...(webSearch === undefined ? [] : [createWebSearchToolDefinition(webSearch)]),
+      ...(steelBrowser === undefined ? [] : createSteelBrowserToolDefinitions(steelBrowser)),
     ];
     const options = sessionStartEvent === undefined
       ? { services, sessionManager, customTools }
@@ -278,6 +280,8 @@ export interface PiSessionServiceDependencies {
   subsessionsEnabled?: boolean;
   /** Optional configured web-search backend; when omitted, no web_search tool is registered. */
   webSearch?: WebSearchToolDeps;
+  /** Optional configured Steel browser backend; when omitted, browser tools are not registered. */
+  steelBrowser?: SteelBrowserToolDeps;
   /** Structured logger for notable runtime events (e.g. spawns). */
   logger?: PiSessionLogger;
 }
@@ -331,6 +335,7 @@ export class PiSessionService {
         read: (parentSessionId, sessionId, query) => this.readSubsession(parentSessionId, sessionId, query),
       },
       deps.webSearch,
+      deps.steelBrowser,
     );
     this.createAgentRuntime = deps.createAgentRuntime ?? defaultCreateAgentRuntime;
     this.workspaceActivity = deps.workspaceActivity;

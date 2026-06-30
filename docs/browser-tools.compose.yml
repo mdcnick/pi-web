@@ -1,0 +1,16 @@
+services:
+  searxng:
+    image: searxng/searxng:latest
+    ports:
+      - "127.0.0.1:8088:8080"
+    environment:
+      - SEARXNG_BASE_URL=http://127.0.0.1:8088/
+    restart: unless-stopped
+
+  steel:
+    image: ghcr.io/steel-dev/steel-browser:latest
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:9223:9223"
+    shm_size: "2gb"
+    restart: unless-stopped

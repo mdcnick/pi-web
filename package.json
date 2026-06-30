@@ -19,6 +19,7 @@
     "docs/plugins.md",
     "docs/telegram-gateway.md",
     "docs/browser-tools.md",
+    "docs/browser-tools.compose.yml",
     "docs/assets",
     "plugin-api.d.ts",
     "plugin-api/unstable.d.ts"

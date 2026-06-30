@@ -70,7 +70,7 @@ This maps naturally to real development work:
 - Send prompts, shell input, and supported commands through the Pi SDK path.
 - Reuse your existing Pi auth and model configuration from `~/.pi/agent`.
 - Extend the UI with trusted plugins that add actions, workspace panels, and workspace-label metadata. See [Plugin API](docs/plugins.md) for LLM-friendly plugin-building docs.
-- Add a SearXNG-backed `web_search` tool for Pi sessions. See [Browser and search tools](docs/browser-tools.md).
+- Add SearXNG-backed search and Steel-backed browser extraction/screenshot tools for Pi sessions. See [Browser and search tools](docs/browser-tools.md).
 - Bridge trusted Telegram users into isolated PI WEB sessions with the bundled/local [Telegram Gateway plugin](docs/telegram-gateway.md).
 
 ## Architecture
@@ -280,6 +280,9 @@ Environment variables:
 - `PI_WEB_MACHINES_FILE` — optional override for the remote machine registry JSON file. Defaults to `$PI_WEB_DATA_DIR/machines.json`.
 - `PI_WEB_MAX_UPLOAD_BYTES` — maximum accepted HTTP request body size in bytes (covers pasted/attached images). Defaults to 64 MB. Also configurable as `maxUploadBytes` in `config.json`.
 - `PI_WEB_SEARXNG_URL` — optional SearXNG base URL for registering the session-daemon `web_search` tool, for example `http://127.0.0.1:8088`. See [Browser and search tools](docs/browser-tools.md).
+- `PI_WEB_STEEL_BASE_URL` — optional Steel Browser API base URL for registering `browser_extract` and `browser_screenshot`, for example `http://127.0.0.1:3000`. If omitted while `PI_WEB_STEEL_API_KEY` is set, PI WEB uses Steel Cloud at `https://api.steel.dev`.
+- `PI_WEB_STEEL_API_KEY` — optional Steel API key. Keep this in private env/config only.
+- `PI_WEB_BROWSER_ALLOW_PRIVATE_NETWORKS` — optional `true`/`1` override that allows browser tools to target local/private IPs. Off by default to reduce SSRF risk.
 - `PI_WEB_INTERNAL_AUTH_TOKEN` / `PI_WEB_ADMIN_TOKEN` — enables built-in admin sign-in without any external auth provider. The browser shows an internal admin access-key form, sends the token as a bearer token, and treats that token as an admin user who can see every project and workspace. Keep this value secret and use it only behind a private network, VPN, tunnel, or reverse proxy.
 - `PI_WEB_INTERNAL_AUTH_USER_ID` / `PI_WEB_ADMIN_USER_ID` — optional user id reported for the internal admin token. Defaults to `internal-admin`.
 - `PI_WEB_WORKSPACE_AUTH` / `PI_WEB_WORKSPACE_ACCESS_ENABLED` — enables workspace access policy enforcement. A configured `PI_WEB_INTERNAL_AUTH_TOKEN` also enables it automatically.
