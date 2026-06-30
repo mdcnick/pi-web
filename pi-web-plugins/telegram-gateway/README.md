@@ -15,6 +15,9 @@ Long polling is intentional: your PI WEB can stay private on `127.0.0.1`, Tailsc
 - One private PI session per allowed Telegram user/bot link by default.
 - Preferred model: add the actual Telegram user's numeric ID, then attach the BotFather token for whichever bot that user/session should use.
 - Dashboard/admin auth is separate; the Telegram Gateway allowlist is not the dashboard login system.
+- Shared-control mode is supported: the gateway may use the PI WEB owner's internal/admin auth token to call the shared PI WEB API for Telegram users who never log into the dashboard.
+- Execution remains isolated by workspace: every session API call includes the target `cwd`, so a PI WEB server with per-user session daemon routing sends `/home/will/...` sessions to Will's daemon/MCP credentials and `/home/nick/...` sessions to Nick's daemon/MCP credentials.
+- Do not copy dashboard auth tokens into another user's MCP/runtime config; share the control-plane auth only at the Telegram gateway/API layer.
 - Legacy single-bot mode still works with `TELEGRAM_BOT_TOKEN`, but the in-app UI is optimized for per-user bot-token routing.
 - The gateway talks to PI WEB's normal local API; it does not expose a public HTTP server.
 - `/setcwd` is admin-only because it controls which workspace future sessions start in.

@@ -13,5 +13,10 @@
     "extensions/**/*.ts",
     "pi-web-plugins/**/*.ts"
   ],
-  "ignoreExportsUsedInFile": true
+  "ignoreBinaries": ["changeset", "eslint", "knip", "tsc", "tsx", "vite", "vitest"],
+  "ignoreDependencies": ["tsx"],
+  "ignoreExportsUsedInFile": true,
+  "ignoreIssues": {
+    "src/config.ts": ["exports"]
+  }
 }

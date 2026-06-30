@@ -8,15 +8,14 @@ export interface AuthChange {
 }
 
 type AuthChangeListener = (change: AuthChange) => void;
-type ModelRegistryInstance = ReturnType<typeof ModelRegistry.create>;
 
 export interface AuthServiceDependencies {
-  modelRegistry?: ModelRegistryInstance;
+  modelRegistry?: ModelRegistry;
   authFlows?: OAuthLoginFlowService;
 }
 
 export class AuthService {
-  readonly modelRegistry: ModelRegistryInstance;
+  readonly modelRegistry: ModelRegistry;
   private readonly authFlows: OAuthLoginFlowService;
   private readonly listeners = new Set<AuthChangeListener>();
 

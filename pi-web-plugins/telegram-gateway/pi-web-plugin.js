@@ -127,7 +127,7 @@ class TelegramGatewayDashboard extends HTMLElement {
         const settings = this.captureFormDraft();
         const id = user?.id ?? 0;
         const label = user === undefined ? "" : userLabel(user);
-        settings.config.users = [...settings.config.users, { telegramUserId: id, label, botId: randomBotId(), botLabel: label || `Telegram user ${String(settings.config.users.length + 1)} bot`, cwd: this.workspacePath || settings.config.defaultCwd, sessionId: this.selectedSessionId || undefined, admin: settings.config.users.length === 0, enabled: true }];
+        settings.config.users = [...settings.config.users, { telegramUserId: id, label, botId: randomBotId(), botLabel: label || `Telegram user ${String(settings.config.users.length + 1)} bot`, cwd: this.workspacePath || settings.config.defaultCwd, admin: settings.config.users.length === 0, enabled: true }];
         this.state = { ...this.state, settings, message: undefined, error: undefined };
         this.render();
     }
@@ -313,7 +313,7 @@ class TelegramGatewayDashboard extends HTMLElement {
           </div>
           <div class="card">
             <div class="row"><h3 style="margin-right:auto">2. Allowed Telegram users</h3><button id="add-user" class="primary">Add Telegram user</button></div>
-            <p class="muted">Each row is an actual Telegram user. Add their numeric Telegram ID, then attach the BotFather token for whichever bot that user/session should use. The dashboard/admin auth is separate; this list is just the Telegram gateway allowlist and bot-token routing.</p>
+            <p class="muted">Each row is an actual Telegram user. Add their numeric Telegram ID, attach the BotFather token for that user's bot, and bind them to a workspace. Session ID is optional: leave it blank and the gateway will create/remember a session when the user sends /new or their first message.</p>
             ${settings.config.users.length === 0 ? `<p class="muted">No Telegram users yet. Add a user, paste the bot token for their bot, then have them send /start to that bot and click Detect.</p>` : settings.config.users.map((user, index) => this.renderUser(user, index)).join("")}
             <div class="row" style="margin-top:10px"><button id="save-users" class="primary">Save Telegram users/settings</button><button id="start-users" class="primary">Save & start gateway</button></div>
             ${this.renderDiscoveredUsers()}
@@ -350,11 +350,11 @@ class TelegramGatewayDashboard extends HTMLElement {
           <label>BotFather token for this user's bot<input data-field="telegram-bot-token" type="password" autocomplete="off" value="${escapeAttr(user.botToken ?? "")}" placeholder="${user.botTokenConfigured === true ? "Saved — paste a new token only to replace it" : "123456:ABC..."}" /></label>
           <label>Bot label <span class="muted">optional</span><input data-field="telegram-bot-label" value="${escapeAttr(user.botLabel ?? user.label ?? "")}" placeholder="Will onboarding bot / Customer A" /></label>
           <label>Workspace path<input id="user-cwd-${String(index)}" data-field="telegram-user-cwd" value="${escapeAttr(user.cwd || this.workspacePath)}" /></label>
-          <label>PI WEB session ID <span class="muted">existing session this user/bot should talk to</span><input id="user-session-${String(index)}" data-field="telegram-user-session" value="${escapeAttr(user.sessionId ?? "")}" placeholder="019f..." /></label>
+          <label>PI WEB session ID <span class="muted">optional; leave blank for /new auto-create</span><input id="user-session-${String(index)}" data-field="telegram-user-session" value="${escapeAttr(user.sessionId ?? "")}" placeholder="Leave blank for /new" /></label>
           <label class="row" style="align-content:end"><input data-field="telegram-user-admin" type="checkbox" ${user.admin === true ? "checked" : ""} style="width:auto" /> Telegram admin commands (/setcwd)</label>
           <label class="row" style="align-content:end"><input data-field="telegram-bot-enabled" type="checkbox" ${user.enabled === false ? "" : "checked"} style="width:auto" /> Enabled</label>
         </div>
-        <div class="row"><button data-test-user-bot="${String(index)}">Test attached bot token</button><button data-detect-user-bot="${String(index)}">Detect this user's ID from /start</button><button data-current-workspace="${String(index)}">Use current workspace</button><button data-selected-session="${String(index)}" ${this.selectedSessionId === "" ? "disabled" : ""}>Use selected session</button></div>
+        <div class="row"><button data-test-user-bot="${String(index)}">Test attached bot token</button><button data-detect-user-bot="${String(index)}">Detect this user's ID from /start</button><button data-current-workspace="${String(index)}">Use current workspace</button><button data-selected-session="${String(index)}" ${this.selectedSessionId === "" ? "disabled" : ""}>Use selected existing session</button></div>
       </div>
     `;
     }

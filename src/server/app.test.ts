@@ -512,8 +512,8 @@ describe("buildApp", () => {
 
   it("bootstraps the first PI WEB admin from a Better Auth user", async () => {
     const policyPath = join(tempDir, "better-auth-bootstrap-admin.json");
-    const fetchMock = vi.fn((input, init) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = fetchInputUrl(input);
       expect(url).toBe("https://better-auth.test/api/auth/session");
       expect(init?.headers).toMatchObject({ authorization: "Bearer first-admin-session" });
       return Promise.resolve(Response.json({ user: { id: "user_first_admin" } }));
@@ -555,8 +555,8 @@ describe("buildApp", () => {
   it("authenticates workspace users through better-auth session endpoint", async () => {
     const policyPath = join(tempDir, "better-auth-authenticated-users.json");
     await writeFile(policyPath, JSON.stringify({ admins: [], users: { user_better_auth: { workspaces: [] } } }));
-    const fetchMock = vi.fn((input, init) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = fetchInputUrl(input);
       expect(url).toBe("https://better-auth.test/api/auth/session");
       expect(init?.headers).toMatchObject({ authorization: "Bearer session-token", "x-api-key": "provider-key" });
       return Promise.resolve(Response.json({ user: { id: "user_better_auth" } }));
@@ -827,6 +827,12 @@ function fakeRemoteClient(overrides: Partial<MachineClient>): MachineClient {
     connectWebSocket: () => { throw new Error("WebSocket not configured for test"); },
     ...overrides,
   };
+}
+
+function fetchInputUrl(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.toString();
+  return input.url;
 }
 
 function restoreEnv(name: string, value: string | undefined): void {

@@ -92,18 +92,18 @@ class BetterAuthWorkspaceProvider implements WorkspaceAuthProvider {
     const cookie = headerValue(request.headers.cookie);
     if (token === undefined && cookie === undefined) return;
 
-    const session = await this.fetchSession({ ...(token === undefined ? {} : { token }), ...(cookie === undefined ? {} : { cookie }) });
+    const session = await this.fetchSession(this.apiUrl, { ...(token === undefined ? {} : { token }), ...(cookie === undefined ? {} : { cookie }) });
     const userId = sessionUserId(session);
     if (userId !== undefined) request.piWebUserId = userId;
   }
 
-  private async fetchSession(auth: { token?: string; cookie?: string }): Promise<unknown> {
+  private async fetchSession(apiUrl: string, auth: { token?: string; cookie?: string }): Promise<unknown> {
     const headers: Record<string, string> = {};
     if (auth.token !== undefined) headers["authorization"] = `Bearer ${auth.token}`;
     if (auth.cookie !== undefined) headers["cookie"] = auth.cookie;
     if (this.apiKey !== undefined) headers["x-api-key"] = this.apiKey;
 
-    const response = await fetch(new URL(this.sessionPath, withTrailingSlash(this.apiUrl!)), { headers });
+    const response = await fetch(new URL(this.sessionPath, withTrailingSlash(apiUrl)), { headers });
     if (!response.ok) return undefined;
     return await response.json().catch((): unknown => undefined);
   }

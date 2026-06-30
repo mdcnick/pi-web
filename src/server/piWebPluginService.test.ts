@@ -5,12 +5,16 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { PiWebPluginService, type PiPackageProvider } from "./piWebPluginService.js";
 
 let tempDir: string;
+let originalPiWebConfig: string | undefined;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), "pi-web-plugin-service-test-"));
+  originalPiWebConfig = process.env["PI_WEB_CONFIG"];
+  process.env["PI_WEB_CONFIG"] = join(tempDir, "config.json");
 });
 
 afterEach(async () => {
+  restoreEnv("PI_WEB_CONFIG", originalPiWebConfig);
   await rm(tempDir, { recursive: true, force: true });
 });
 
@@ -188,6 +192,11 @@ describe("PiWebPluginService", () => {
     await expect(service.readAsset("safe", "../escape.js")).resolves.toBeUndefined();
   });
 });
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) Reflect.deleteProperty(process.env, name);
+  else process.env[name] = value;
+}
 
 async function writePlugin(root: string, options: { packageJson: unknown; files: Record<string, string> }): Promise<void> {
   await mkdir(root, { recursive: true });

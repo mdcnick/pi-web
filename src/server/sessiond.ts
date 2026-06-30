@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir, rm } from "node:fs/promises";
+import { chmod, mkdir, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import Fastify from "fastify";
 import fastifyWebsocket from "@fastify/websocket";
@@ -8,6 +8,7 @@ import { registerWorkspaceActivityRoutes } from "./activity/workspaceActivityRou
 import { SessionEventHub } from "./realtime/sessionEventHub.js";
 import { AuthService } from "./sessions/authService.js";
 import { registerAuthRoutes } from "./sessions/authRoutes.js";
+import { createSharedProviderModelRegistry } from "./sessions/sharedProviderAuth.js";
 import { PiSessionService } from "./sessions/piSessionService.js";
 import { registerSessionRoutes } from "./sessions/sessionRoutes.js";
 import { ProjectScopedSpawnTargetResolver } from "./sessions/spawnTargetResolver.js";
@@ -26,7 +27,8 @@ await app.register(fastifyWebsocket);
 
 const eventHub = new SessionEventHub();
 const workspaceActivity = new WorkspaceActivityService(eventHub);
-const auth = new AuthService();
+const sharedProviderModelRegistry = createSharedProviderModelRegistry();
+const auth = new AuthService(sharedProviderModelRegistry === undefined ? {} : { modelRegistry: sharedProviderModelRegistry });
 const { config } = effectivePiWebConfig();
 const spawnTargets = spawnSessionsEnabled(process.env, config)
   ? new ProjectScopedSpawnTargetResolver({ projects: new ProjectService(new ProjectStore()), workspaces: new WorkspaceService() })
@@ -88,5 +90,6 @@ if (port !== undefined) {
   await mkdir(dirname(path), { recursive: true });
   await rm(path, { force: true });
   await app.listen({ path });
+  await chmod(path, 0o775);
   process.on("exit", () => void rm(path, { force: true }));
 }

@@ -154,7 +154,7 @@ export function registerTelegramGatewayRoutes(app: FastifyInstance, options: Tel
     try {
       workspaceAccess.requireAdmin(request);
       const config = await readGatewayConfig(configPath);
-      if (processState.child !== undefined && processState.child.exitCode === null) return gatewaySettingsResponse(configPath, config, processState);
+      if (processState.child?.exitCode === null) return gatewaySettingsResponse(configPath, config, processState);
       if (!hasConfiguredBotToken(config)) throw new Error("Save at least one session bot token before starting the gateway");
       const script = options.gatewayScriptPath ?? resolveGatewayScriptPath();
       if (!existsSync(script)) throw new Error(`Gateway script not found: ${script}`);
@@ -210,7 +210,7 @@ function gatewaySettingsResponse(path: string, config: TelegramGatewayConfigFile
 }
 
 function gatewayProcessResponse(processState: TelegramGatewayProcessState) {
-  const running = processState.child !== undefined && processState.child.exitCode === null;
+  const running = processState.child?.exitCode === null;
   return {
     running,
     pid: running ? processState.child?.pid : undefined,
@@ -231,8 +231,8 @@ function startGatewayProcess(processState: TelegramGatewayProcessState, script: 
   });
   processState.child = child;
   processState.startedAt = new Date().toISOString();
-  child.stdout?.on("data", (chunk) => appendLog(processState, String(chunk)));
-  child.stderr?.on("data", (chunk) => appendLog(processState, String(chunk)));
+  child.stdout.on("data", (chunk) => { appendLog(processState, String(chunk)); });
+  child.stderr.on("data", (chunk) => { appendLog(processState, String(chunk)); });
   child.on("error", (error) => {
     processState.lastError = error.message;
     appendLog(processState, `[telegram-gateway] process error: ${error.message}`);
@@ -245,7 +245,7 @@ function startGatewayProcess(processState: TelegramGatewayProcessState, script: 
 }
 
 function stopGatewayProcess(processState: TelegramGatewayProcessState): void {
-  if (processState.child === undefined || processState.child.exitCode !== null) return;
+  if (processState.child?.exitCode !== null) return;
   processState.child.kill("SIGTERM");
 }
 
@@ -461,7 +461,7 @@ function hasConfiguredBotToken(config: TelegramGatewayConfigFile): boolean {
 
 async function telegram(token: string, method: string, payload: unknown, timeoutMs = 30_000): Promise<unknown> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => { controller.abort(); }, timeoutMs);
   try {
     const response = await fetch(`https://api.telegram.org/bot${encodeURIComponent(token)}/${method}`, {
       method: "POST",
@@ -469,12 +469,24 @@ async function telegram(token: string, method: string, payload: unknown, timeout
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
-    const data = await response.json() as { ok?: boolean; result?: unknown; description?: string };
+    const data = await parseTelegramResponse(response);
     if (!response.ok || data.ok !== true) throw new Error(`Telegram ${method} failed: ${data.description ?? response.statusText}`);
     return data.result;
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function parseTelegramResponse(response: Response): Promise<{ ok?: boolean; result?: unknown; description?: string }> {
+  const value: unknown = await response.json();
+  if (!isRecord(value)) return {};
+  const ok = value["ok"];
+  const description = value["description"];
+  return {
+    ...(typeof ok === "boolean" ? { ok } : {}),
+    result: value["result"],
+    ...(typeof description === "string" ? { description } : {}),
+  };
 }
 
 function uniqueTelegramUsers(updates: unknown): TelegramUserFromUpdate[] {

@@ -82,8 +82,8 @@ class TelegramGatewayDashboard extends HTMLElement {
     try {
       const value = await api<TelegramGatewayResponse>("/api/telegram-gateway");
       const config = { ...value.config };
-      if (value.exists === false || config.defaultCwd === "") config.defaultCwd = this.workspacePath;
-      if (value.exists === false) config.piWebBaseUrl = window.location.origin;
+      if (!value.exists || config.defaultCwd === "") config.defaultCwd = this.workspacePath;
+      if (!value.exists) config.piWebBaseUrl = window.location.origin;
       if (config.machineId === "") config.machineId = this.machineId;
       this.state = { ...this.state, loading: false, settings: { ...value, config } };
     } catch (error) {
@@ -184,7 +184,7 @@ class TelegramGatewayDashboard extends HTMLElement {
     const settings = this.captureFormDraft();
     const id = user?.id ?? 0;
     const label = user === undefined ? "" : userLabel(user);
-    settings.config.users = [...settings.config.users, { telegramUserId: id, label, botId: randomBotId(), botLabel: label || `Telegram user ${String(settings.config.users.length + 1)} bot`, cwd: this.workspacePath || settings.config.defaultCwd, sessionId: this.selectedSessionId || undefined, admin: settings.config.users.length === 0, enabled: true }];
+    settings.config.users = [...settings.config.users, { telegramUserId: id, label, botId: randomBotId(), botLabel: label || `Telegram user ${String(settings.config.users.length + 1)} bot`, cwd: this.workspacePath || settings.config.defaultCwd, admin: settings.config.users.length === 0, enabled: true }];
     this.state = { ...this.state, settings, message: undefined, error: undefined };
     this.render();
   }
@@ -372,7 +372,7 @@ class TelegramGatewayDashboard extends HTMLElement {
           </div>
           <div class="card">
             <div class="row"><h3 style="margin-right:auto">2. Allowed Telegram users</h3><button id="add-user" class="primary">Add Telegram user</button></div>
-            <p class="muted">Each row is an actual Telegram user. Add their numeric Telegram ID, then attach the BotFather token for whichever bot that user/session should use. The dashboard/admin auth is separate; this list is just the Telegram gateway allowlist and bot-token routing.</p>
+            <p class="muted">Each row is an actual Telegram user. Add their numeric Telegram ID, attach the BotFather token for that user's bot, and bind them to a workspace. Session ID is optional: leave it blank and the gateway will create/remember a session when the user sends /new or their first message.</p>
             ${settings.config.users.length === 0 ? `<p class="muted">No Telegram users yet. Add a user, paste the bot token for their bot, then have them send /start to that bot and click Detect.</p>` : settings.config.users.map((user, index) => this.renderUser(user, index)).join("")}
             <div class="row" style="margin-top:10px"><button id="save-users" class="primary">Save Telegram users/settings</button><button id="start-users" class="primary">Save & start gateway</button></div>
             ${this.renderDiscoveredUsers()}
@@ -399,7 +399,7 @@ class TelegramGatewayDashboard extends HTMLElement {
   }
 
   renderUser(user: TelegramGatewayUser, index: number): string {
-    const title = user.label || user.botLabel || `Telegram user ${String(index + 1)}`;
+    const title = user.label ?? user.botLabel ?? `Telegram user ${String(index + 1)}`;
     return `
       <div class="user" data-user-row data-bot-token-configured="${user.botTokenConfigured === true ? "true" : "false"}">
         <div class="row"><strong>${escapeHtml(title)}</strong><span class="pill ${user.botTokenConfigured === true ? "ok" : "muted"}">${user.botTokenConfigured === true ? "token saved" : "token needed"}</span><button data-remove-user="${String(index)}" class="danger">Remove</button></div>
@@ -409,12 +409,12 @@ class TelegramGatewayDashboard extends HTMLElement {
           <label>Telegram numeric ID<input data-field="telegram-user-id" value="${user.telegramUserId === 0 ? "" : String(user.telegramUserId)}" inputmode="numeric" placeholder="Click Detect after they send /start" /></label>
           <label>BotFather token for this user's bot<input data-field="telegram-bot-token" type="password" autocomplete="off" value="${escapeAttr(user.botToken ?? "")}" placeholder="${user.botTokenConfigured === true ? "Saved — paste a new token only to replace it" : "123456:ABC..."}" /></label>
           <label>Bot label <span class="muted">optional</span><input data-field="telegram-bot-label" value="${escapeAttr(user.botLabel ?? user.label ?? "")}" placeholder="Will onboarding bot / Customer A" /></label>
-          <label>Workspace path<input id="user-cwd-${String(index)}" data-field="telegram-user-cwd" value="${escapeAttr(user.cwd || this.workspacePath)}" /></label>
-          <label>PI WEB session ID <span class="muted">existing session this user/bot should talk to</span><input id="user-session-${String(index)}" data-field="telegram-user-session" value="${escapeAttr(user.sessionId ?? "")}" placeholder="019f..." /></label>
+          <label>Workspace path<input id="user-cwd-${String(index)}" data-field="telegram-user-cwd" value="${escapeAttr(user.cwd ?? this.workspacePath)}" /></label>
+          <label>PI WEB session ID <span class="muted">optional; leave blank for /new auto-create</span><input id="user-session-${String(index)}" data-field="telegram-user-session" value="${escapeAttr(user.sessionId ?? "")}" placeholder="Leave blank for /new" /></label>
           <label class="row" style="align-content:end"><input data-field="telegram-user-admin" type="checkbox" ${user.admin === true ? "checked" : ""} style="width:auto" /> Telegram admin commands (/setcwd)</label>
           <label class="row" style="align-content:end"><input data-field="telegram-bot-enabled" type="checkbox" ${user.enabled === false ? "" : "checked"} style="width:auto" /> Enabled</label>
         </div>
-        <div class="row"><button data-test-user-bot="${String(index)}">Test attached bot token</button><button data-detect-user-bot="${String(index)}">Detect this user's ID from /start</button><button data-current-workspace="${String(index)}">Use current workspace</button><button data-selected-session="${String(index)}" ${this.selectedSessionId === "" ? "disabled" : ""}>Use selected session</button></div>
+        <div class="row"><button data-test-user-bot="${String(index)}">Test attached bot token</button><button data-detect-user-bot="${String(index)}">Detect this user's ID from /start</button><button data-current-workspace="${String(index)}">Use current workspace</button><button data-selected-session="${String(index)}" ${this.selectedSessionId === "" ? "disabled" : ""}>Use selected existing session</button></div>
       </div>
     `;
   }
@@ -427,25 +427,31 @@ class TelegramGatewayDashboard extends HTMLElement {
     this.shadowRoot?.getElementById("save-token")?.addEventListener("click", () => { void this.saveBotToken(); });
     this.shadowRoot?.getElementById("save-users")?.addEventListener("click", () => { void this.save(); });
     this.shadowRoot?.getElementById("start-users")?.addEventListener("click", () => { void this.start(); });
-    this.shadowRoot?.getElementById("add-user")?.addEventListener("click", () => this.addUser());
+    this.shadowRoot?.getElementById("add-user")?.addEventListener("click", () => { this.addUser(); });
     for (const button of this.shadowRoot?.querySelectorAll("[data-remove-user]") ?? []) {
-      button.addEventListener("click", () => this.removeUser(Number((button as HTMLElement).getAttribute("data-remove-user"))));
+      if (!(button instanceof HTMLElement)) continue;
+      button.addEventListener("click", () => { this.removeUser(Number(button.getAttribute("data-remove-user"))); });
     }
     for (const button of this.shadowRoot?.querySelectorAll("[data-test-user-bot]") ?? []) {
-      button.addEventListener("click", () => { void this.testToken(Number((button as HTMLElement).getAttribute("data-test-user-bot"))); });
+      if (!(button instanceof HTMLElement)) continue;
+      button.addEventListener("click", () => { void this.testToken(Number(button.getAttribute("data-test-user-bot"))); });
     }
     for (const button of this.shadowRoot?.querySelectorAll("[data-detect-user-bot]") ?? []) {
-      button.addEventListener("click", () => { void this.discoverUsers(Number((button as HTMLElement).getAttribute("data-detect-user-bot"))); });
+      if (!(button instanceof HTMLElement)) continue;
+      button.addEventListener("click", () => { void this.discoverUsers(Number(button.getAttribute("data-detect-user-bot"))); });
     }
     for (const button of this.shadowRoot?.querySelectorAll("[data-current-workspace]") ?? []) {
-      button.addEventListener("click", () => this.addCurrentWorkspaceToUser(Number((button as HTMLElement).getAttribute("data-current-workspace"))));
+      if (!(button instanceof HTMLElement)) continue;
+      button.addEventListener("click", () => { this.addCurrentWorkspaceToUser(Number(button.getAttribute("data-current-workspace"))); });
     }
     for (const button of this.shadowRoot?.querySelectorAll("[data-selected-session]") ?? []) {
-      button.addEventListener("click", () => this.addSelectedSessionToUser(Number((button as HTMLElement).getAttribute("data-selected-session"))));
+      if (!(button instanceof HTMLElement)) continue;
+      button.addEventListener("click", () => { this.addSelectedSessionToUser(Number(button.getAttribute("data-selected-session"))); });
     }
     for (const button of this.shadowRoot?.querySelectorAll("[data-add-discovered]") ?? []) {
       button.addEventListener("click", () => {
-        const id = Number((button as HTMLElement).getAttribute("data-add-discovered"));
+        if (!(button instanceof HTMLElement)) return;
+        const id = Number(button.getAttribute("data-add-discovered"));
         const user = this.state.discovered.find((candidate) => candidate.id === id);
         this.addUser(user);
       });
@@ -460,9 +466,16 @@ async function api<T>(path: string, options: { method?: string; body?: unknown }
     init.body = JSON.stringify(options.body);
   }
   const response = await fetch(path, init);
-  const value = await response.json() as T & { error?: string };
-  if (!response.ok) throw new Error(value.error ?? `HTTP ${String(response.status)}`);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- API callers supply the expected response shape.
+  const value: T = await response.json();
+  if (!response.ok) throw new Error(errorMessageFromResponse(value) ?? `HTTP ${String(response.status)}`);
   return value;
+}
+
+function errorMessageFromResponse(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null || !("error" in value)) return undefined;
+  const error = Reflect.get(value, "error");
+  return typeof error === "string" ? error : undefined;
 }
 
 function inputValue(root: ParentNode | null | undefined, idOrField: string): string {
@@ -478,18 +491,18 @@ function checkboxValue(root: ParentNode | null | undefined, field: string): bool
 }
 
 function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
+  return structuredClone(value);
 }
 
 function userLabel(user: TelegramDiscoveredUser): string {
   const handle = user.username === undefined ? "" : `@${user.username}`;
   const name = [user.first_name, user.last_name].filter((part): part is string => part !== undefined && part !== "").join(" ");
-  return handle || name || String(user.id);
+  return handle !== "" ? handle : name !== "" ? name : String(user.id);
 }
 
 function selectedSessionId(session: unknown): string {
   if (typeof session !== "object" || session === null || !("id" in session)) return "";
-  const id = (session as { id?: unknown }).id;
+  const id = Reflect.get(session, "id");
   return typeof id === "string" ? id : "";
 }
 

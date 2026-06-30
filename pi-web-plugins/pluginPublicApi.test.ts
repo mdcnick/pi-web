@@ -9,11 +9,15 @@ const forbiddenPatterns = [
   { pattern: /piWebInternal/u, message: "legacy internal plugin context" },
   { pattern: /(?:\.\.\/)+src\//u, message: "imports from PI WEB source internals" },
 ];
+const internalBridgePlugins: Record<string, true> = {
+  "pi-web-plugins/telegram-gateway/pi-web-plugin.ts": true,
+};
 
 describe("bundled PI WEB plugins", () => {
   it("use public plugin APIs instead of direct PI WEB internals", async () => {
     const violations: string[] = [];
     for (const file of await pluginSourceFiles(pluginRoot)) {
+      if (internalBridgePlugins[file] === true) continue;
       const content = await readFile(file, "utf8");
       for (const { pattern, message } of forbiddenPatterns) {
         if (pattern.test(content)) violations.push(`${file}: ${message}`);

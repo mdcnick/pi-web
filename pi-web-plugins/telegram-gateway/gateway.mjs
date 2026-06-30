@@ -136,21 +136,22 @@ class TelegramPiWebGateway {
     }
 
     const text = message.text.trim();
+    const command = telegramCommand(text);
     console.log(`[telegram-gateway] received message user=${from.id} chat=${chat.id} route=${route.cwd} session=${route.sessionId ?? "auto"}`);
 
     try {
-      if (text === "/start" || text === "/help") {
+      if (command === "/start" || command === "/help") {
         await this.sendMessage(chat.id, helpText(route));
-      } else if (text === "/status") {
+      } else if (command === "/status") {
         await this.sendMessage(chat.id, this.statusText(from.id, chat.id, route));
-      } else if (text === "/new" || text === "/reset") {
+      } else if (command === "/new" || command === "/reset") {
         const session = await this.createSession(route.cwd);
         await this.protectTelegramSession(session.id, route.cwd);
         await this.setSession(from.id, chat.id, route.cwd, session.id);
         await this.sendMessage(chat.id, `Started a fresh PI WEB session.\nSession: ${session.id}\nWorkspace: ${route.cwd}`);
-      } else if (text.startsWith("/setcwd")) {
+      } else if (command === "/setcwd") {
         await this.handleSetCwd(from.id, chat.id, text);
-      } else if (text.startsWith("/")) {
+      } else if (command !== undefined) {
         await this.sendMessage(chat.id, "Unknown command. Try /help.");
       } else {
         await this.forwardPrompt(from.id, chat.id, text, route);
@@ -304,7 +305,13 @@ class TelegramPiWebGateway {
             const data = JSON.parse(await webSocketDataText(event.data));
             if (data.type === "agent.start") sawAgentStart = true;
             if (data.type === "assistant.delta" && sawAgentStart && typeof data.text === "string") chunks.push(data.text);
-            if (data.type === "session.error") failure = new Error(String(data.message ?? "PI WEB session error"));
+            if (data.type === "session.error") {
+              failure = new Error(String(data.message ?? "PI WEB session error"));
+              clearTimeout(timer);
+              try { ws.close(); } catch { /* noop */ }
+              reject(failure);
+              return;
+            }
             if (data.type === "agent.end" && sawAgentStart) {
               finished = true;
               clearTimeout(timer);
@@ -596,6 +603,12 @@ async function saveState(path, state) {
   await mkdir(directory, { recursive: true });
   await writeFile(tempPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
   await rename(tempPath, filePath);
+}
+
+function telegramCommand(text) {
+  const firstToken = text.trim().split(/\s+/u, 1)[0] ?? "";
+  const match = /^\/([A-Za-z0-9_]+)(?:@[A-Za-z0-9_]+)?$/u.exec(firstToken);
+  return match === null ? undefined : `/${match[1].toLowerCase()}`;
 }
 
 function helpText(route) {

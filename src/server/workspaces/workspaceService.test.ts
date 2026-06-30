@@ -25,7 +25,7 @@ describe("WorkspaceService", () => {
     const repo = join(root, "repo");
     const projectPath = join(repo, "workspaces", "generated-workspaces");
     await mkdir(projectPath, { recursive: true });
-    await execFileAsync("git", ["init", repo]);
+    await git(["init", repo]);
 
     const workspaces = await new WorkspaceService().list({ id: "generated", name: "Generated", path: projectPath, createdAt: "2026-06-29T00:00:00.000Z" });
 
@@ -48,11 +48,11 @@ describe("WorkspaceService", () => {
     const projectPath = join(repo, relativeProjectPath);
     const linkedProjectPath = join(linkedWorktree, relativeProjectPath);
     await mkdir(projectPath, { recursive: true });
-    await execFileAsync("git", ["init", repo]);
+    await git(["init", repo]);
     await writeFile(join(projectPath, "package.json"), "{}\n");
-    await execFileAsync("git", ["-C", repo, "add", "."]);
-    await execFileAsync("git", ["-C", repo, "-c", "user.name=PI WEB", "-c", "user.email=pi-web@example.test", "commit", "-m", "init"]);
-    await execFileAsync("git", ["-C", repo, "worktree", "add", linkedWorktree, "-b", "feature"]);
+    await git(["-C", repo, "add", "."]);
+    await git(["-C", repo, "-c", "user.name=PI WEB", "-c", "user.email=pi-web@example.test", "commit", "-m", "init"]);
+    await git(["-C", repo, "worktree", "add", linkedWorktree, "-b", "feature"]);
 
     const workspaces = await new WorkspaceService().list({ id: "site", name: "Site", path: projectPath, createdAt: "2026-06-29T00:00:00.000Z" });
 
@@ -65,4 +65,14 @@ describe("WorkspaceService", () => {
     });
   });
 });
+
+async function git(args: string[]): Promise<void> {
+  await execFileAsync("git", args, { env: cleanGitEnv() });
+}
+
+function cleanGitEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const key of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX"]) Reflect.deleteProperty(env, key);
+  return env;
+}
 
