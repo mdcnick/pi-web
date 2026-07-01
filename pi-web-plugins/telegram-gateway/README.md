@@ -52,6 +52,7 @@ Set:
 - `piWebBaseUrl`: your PI WEB web/API URL, usually `http://127.0.0.1:8504`.
 - `defaultCwd`: fallback absolute workspace path.
 - `agentRouting.enabled`: set `true` to make Telegram act as an agent-channel adapter. The gateway then wraps each normal Telegram message with channel identity, linked workspace, and instructions to use PI WEB subsession/agent tools for broad tasks when available.
+- `telegramFormatting`: enabled by default; adds Telegram-friendly response instructions and rewrites GitHub-style markdown tables into bullets before sending.
 - `sessionBots[]`: internal config rows for allowed Telegram users and their attached bot tokens.
   - `allowedTelegramUserIds`: the actual numeric Telegram user IDs allowed through that row.
   - `telegramBotToken`: the BotFather token for the bot that user/session should use.
@@ -87,6 +88,19 @@ Then set this in `~/.pi-web/telegram-gateway/config.json`:
 ```
 
 Telegram users listed under a Clerk user record's `telegramUserIds` inherit that user's allowed `workspaces`. This is optional/advanced; the basic Telegram Gateway UI can simply allow a Telegram numeric ID and attach that user's bot token without using the dashboard auth file.
+
+## Telegram formatting
+
+The gateway formats assistant replies before sending them to Telegram. It asks PI WEB to avoid GitHub-flavored markdown tables, then defensively converts any markdown table that still appears into bullet/key-value text. It also strips common browser-only markdown markers such as heading hashes, bold markers, and inline-code backticks outside fenced code blocks.
+
+Disable this manually only if you want raw PI WEB markdown:
+
+```json
+"telegramFormatting": {
+  "enabled": false,
+  "promptInstructions": false
+}
+```
 
 ## Telegram commands
 

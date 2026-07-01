@@ -27,6 +27,8 @@ Each Telegram user/chat gets a stable isolated PI WEB session mapping in the gat
 
 When `agentRouting.enabled` is set in the gateway config, the gateway becomes a Telegram channel adapter for the layered automation system. Normal Telegram messages are wrapped with Telegram user/chat identity, linked PI WEB workspace, bot label, and instructions that tell the PI WEB session to use available agent/subsession tools for broad research, implementation, and review tasks. This does not replace Better Auth or workspace policy; it only adds channel context after the Telegram user has been allowed.
 
+Assistant replies are Telegram-formatted by default. The gateway asks PI WEB to avoid markdown tables and then rewrites any GitHub-style markdown table that still appears into bullet/key-value lines before chunking and sending the message.
+
 ## Quick start
 
 Run the setup wizard:

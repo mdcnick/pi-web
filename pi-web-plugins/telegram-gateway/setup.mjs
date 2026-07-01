@@ -38,6 +38,10 @@ async function main() {
       piWebBaseUrl,
       machineId: "local",
       defaultCwd,
+      telegramFormatting: {
+        enabled: true,
+        promptInstructions: true,
+      },
       sessionBots: [
         {
           id: "owner-session-bot",
