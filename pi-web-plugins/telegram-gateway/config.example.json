@@ -4,6 +4,10 @@
   "machineId": "local",
   "defaultCwd": "/absolute/path/to/default/workspace",
   "workspaceAccessPath": "~/.pi-web/workspace-access.json",
+  "telegramFormatting": {
+    "enabled": true,
+    "promptInstructions": true
+  },
   "sessionBots": [
     {
       "id": "friend-session-1",

@@ -24,6 +24,8 @@ Telegram user
 
 Each Telegram user/chat gets a stable isolated PI WEB session mapping in the gateway state file. `/new` creates a fresh PI WEB session.
 
+Assistant replies are Telegram-formatted by default. The gateway asks PI WEB to avoid markdown tables and then rewrites any GitHub-style markdown table that still appears into bullet/key-value lines before chunking and sending the message.
+
 ## Quick start
 
 Run the setup wizard:

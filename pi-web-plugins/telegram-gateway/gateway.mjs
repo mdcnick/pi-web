@@ -3,9 +3,15 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { formatTelegramResponse } from "./telegram-formatting.mjs";
 
 const DEFAULT_CONFIG_PATH = "~/.pi-web/telegram-gateway/config.json";
 const DEFAULT_STATE_PATH = "~/.pi-web/telegram-gateway/state.json";
+const TELEGRAM_FORMATTING_INSTRUCTIONS = [
+  "Format the final answer for Telegram, not the PI WEB browser.",
+  "Do not use markdown tables; Telegram renders them poorly. Use short sections, bullets, or key/value lines instead.",
+  "Use concise plain text. Avoid decorative markdown that depends on GitHub rendering.",
+].join(" ");
 
 async function main() {
   const configPath = expandHome(getArg("--config") ?? process.env.TELEGRAM_GATEWAY_CONFIG ?? DEFAULT_CONFIG_PATH);
@@ -186,11 +192,12 @@ class TelegramPiWebGateway {
 
   async forwardPrompt(userId, chatId, text, route) {
     const sessionId = await this.ensureSession(userId, chatId, route.cwd);
+    const promptText = buildTelegramPrompt(this.config, text);
     const status = await this.piWebJson(`/sessions/${encodeURIComponent(sessionId)}/status?cwd=${encodeURIComponent(route.cwd)}`);
     if (status.isStreaming || status.isCompacting) {
       await this.piWebJson(`/sessions/${encodeURIComponent(sessionId)}/prompt`, {
         method: "POST",
-        body: { cwd: route.cwd, text, streamingBehavior: "followUp" },
+        body: { cwd: route.cwd, text: promptText, streamingBehavior: "followUp" },
       });
       await this.sendMessage(chatId, "Queued behind the current PI response.");
       return;
@@ -199,9 +206,10 @@ class TelegramPiWebGateway {
     await this.sendMessage(chatId, `Got it — waking PI WEB session ${sessionId.slice(0, 8)}…`);
     const typing = this.keepTyping(chatId);
     try {
-      const reply = await this.promptAndCollect(sessionId, route.cwd, text);
-      console.log(`[telegram-gateway] sending response user=${userId} chat=${chatId} session=${sessionId} chars=${String((reply || "Done.").length)}`);
-      await this.sendLongMessage(chatId, reply || "Done.");
+      const rawReply = await this.promptAndCollect(sessionId, route.cwd, promptText);
+      const reply = formatTelegramResponse(this.config, rawReply || "Done.");
+      console.log(`[telegram-gateway] sending response user=${userId} chat=${chatId} session=${sessionId} chars=${String(reply.length)}`);
+      await this.sendLongMessage(chatId, reply);
     } finally {
       typing.stop();
     }
@@ -466,6 +474,7 @@ async function loadConfig(path) {
     adminTelegramUserIds: numberArray(parsed.adminTelegramUserIds ?? [], "adminTelegramUserIds"),
     userRoutes: recordOrEmpty(parsed.userRoutes),
     sessionBots: parseSessionBots(parsed.sessionBots),
+    telegramFormatting: parseTelegramFormatting(parsed.telegramFormatting),
     statePath: expandHome(stringOrUndefined(parsed.statePath) ?? DEFAULT_STATE_PATH),
     pollTimeoutSeconds: positiveNumber(parsed.pollTimeoutSeconds, 25),
     requestTimeoutMs: positiveNumber(parsed.requestTimeoutMs, 30000),
@@ -481,6 +490,16 @@ async function loadConfig(path) {
     if (route.sessionId !== undefined && typeof route.sessionId !== "string") throw new Error(`userRoutes.${userId}.sessionId must be a string`);
   }
   return config;
+}
+
+function parseTelegramFormatting(value) {
+  if (value === undefined) return { enabled: true, promptInstructions: true };
+  if (typeof value === "boolean") return { enabled: value, promptInstructions: true };
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("telegramFormatting must be a boolean or object");
+  return {
+    enabled: value.enabled !== false,
+    promptInstructions: value.promptInstructions !== false,
+  };
 }
 
 function parseSessionBots(value) {
@@ -502,6 +521,7 @@ function parseSessionBots(value) {
       adminTelegramUserIds: admin,
       cwd,
       sessionId: stringOrUndefined(item.sessionId),
+      telegramFormatting: item.telegramFormatting === undefined ? undefined : parseTelegramFormatting(item.telegramFormatting),
       enabled: item.enabled !== false,
     };
   });
@@ -524,6 +544,7 @@ function expandSessionBotConfigs(config) {
         sessionBot: true,
         telegramBotToken: bot.telegramBotToken,
         defaultCwd,
+        telegramFormatting: bot.telegramFormatting ?? config.telegramFormatting,
         allowedTelegramUserIds: bot.allowedTelegramUserIds,
         adminTelegramUserIds: bot.adminTelegramUserIds,
         userRoutes,
@@ -547,6 +568,7 @@ function gatewayConfigFingerprint(config) {
     allowedTelegramUserIds: config.allowedTelegramUserIds,
     adminTelegramUserIds: config.adminTelegramUserIds,
     userRoutes: config.userRoutes,
+    telegramFormatting: config.telegramFormatting,
     statePath: config.statePath,
     pollTimeoutSeconds: config.pollTimeoutSeconds,
     requestTimeoutMs: config.requestTimeoutMs,
@@ -623,6 +645,15 @@ function helpText(route) {
     "",
     `Workspace: ${route.cwd}`,
   ].join("\n");
+}
+
+function buildTelegramPrompt(config, text) {
+  if (!config.telegramFormatting.promptInstructions) return text;
+  return [
+    TELEGRAM_FORMATTING_INSTRUCTIONS,
+    "Telegram message:",
+    text,
+  ].join("\n\n");
 }
 
 function routeKey(userId, chatId) {
