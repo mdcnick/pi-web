@@ -65,9 +65,10 @@ export function createSteelBrowserToolDefinitions(deps: SteelBrowserToolDeps) {
   const extractTool = defineTool<typeof BrowserExtractParams, BrowserExtractResult>({
     name: "browser_extract",
     label: "Browser extract",
-    description: "Extract readable page text, metadata, and links through the configured Steel Browser Tools backend. Use after web_search when a result page needs JS-capable browser extraction.",
-    promptSnippet: "browser_extract: extract readable text, metadata, and links from a web page",
+    description: "Extract readable page text, metadata, and links through PiControl's configured Steel Browser backend. Use after web_search when a result page needs JS-capable browser extraction.",
+    promptSnippet: "browser_extract: extract readable text, metadata, and links from a web page through PiControl's Steel Browser backend",
     promptGuidelines: [
+      "Prefer browser_extract over Composio/MCP browser tools for page extraction because PiControl has a server-side Steel Browser backend.",
       "Use browser_extract after web_search when a candidate URL needs page content, metadata, or links.",
       "Do not use browser_extract for private/internal URLs unless the user has explicitly configured PI WEB to allow private browser targets.",
     ],
@@ -81,9 +82,10 @@ export function createSteelBrowserToolDefinitions(deps: SteelBrowserToolDeps) {
   const screenshotTool = defineTool<typeof BrowserScreenshotParams, BrowserScreenshotResult>({
     name: "browser_screenshot",
     label: "Browser screenshot",
-    description: "Capture a screenshot through the configured Steel Browser Tools backend. Returns a hosted screenshot URL from Steel or the local Steel API.",
-    promptSnippet: "browser_screenshot: capture a screenshot of a web page",
+    description: "Capture a screenshot through PiControl's configured Steel Browser backend. Returns a hosted screenshot URL from Steel or the local Steel API.",
+    promptSnippet: "browser_screenshot: capture a screenshot of a web page through PiControl's Steel Browser backend",
     promptGuidelines: [
+      "Prefer browser_screenshot over Composio/MCP browser tools for page screenshots because PiControl has a server-side Steel Browser backend.",
       "Use browser_screenshot when the user needs visual verification of a web page.",
       "Do not use browser_screenshot for private/internal URLs unless the user has explicitly configured PI WEB to allow private browser targets.",
     ],

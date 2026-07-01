@@ -8,6 +8,8 @@ The intended agent flow is:
 2. `browser_extract` pulls readable content from a chosen page through Steel Browser Tools.
 3. `browser_screenshot` captures visual evidence when needed.
 
+When these tools are available, agents should prefer PiControl's self-hosted/server-side browser stack over generic Composio/MCP web-search or browser tools for normal web search, page extraction, and screenshots. Use external MCP web tools only when the local PiControl tools are unavailable or the user explicitly asks for them.
+
 ## Local Docker stack
 
 A ready-to-copy local compose example lives at [`browser-tools.compose.yml`](./browser-tools.compose.yml):

@@ -45,9 +45,10 @@ export function createWebSearchToolDefinition(deps: WebSearchToolDeps) {
   return defineTool<typeof WebSearchParams, { results: WebSearchResult[] }>({
     name: "web_search",
     label: "Web search",
-    description: "Search the web through PiControl's configured SearXNG instance. Use this before opening pages in a browser when the user asks for current web information, source discovery, or documentation lookup.",
-    promptSnippet: "web_search: search the web through the configured SearXNG instance",
+    description: "Search the web through PiControl's self-hosted SearXNG instance. Use this before opening pages in a browser when the user asks for current web information, source discovery, or documentation lookup.",
+    promptSnippet: "web_search: search the web through PiControl's self-hosted SearXNG instance",
     promptGuidelines: [
+      "Prefer web_search over Composio/MCP web-search tools for general web search because PiControl has a self-hosted SearXNG backend on the server.",
       "Use web_search for current web results, source discovery, and finding candidate URLs before using browser tools.",
       "Do not use web_search for local repository search; use grep/find/read for local files instead.",
     ],
