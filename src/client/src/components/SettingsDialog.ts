@@ -9,6 +9,7 @@ import "./settings/SettingsPackagesPanel";
 import "./settings/SettingsPluginsPanel";
 import "./settings/SettingsShortcutsPanel";
 import { friendlyPiPackageErrorMessage, piPackageMutationFollowUpMessage, piPackageTargetContext, piPackageTargetLabel, shouldRefreshGatewayPluginsAfterPiPackageMutation, type PiPackageOperationState, type PiPackageTargetContext } from "./settings/piPackageSettings";
+import { loadGatewaySettingsData, loadPiPackagesData } from "./settings/settingsDataLoading";
 
 @customElement("settings-dialog")
 export class SettingsDialog extends LitElement {
@@ -22,6 +23,7 @@ export class SettingsDialog extends LitElement {
   @state() private pluginsResponse: PiWebPluginsResponse | undefined;
   @state() private packagesResponse: PiPackagesResponse | undefined;
   @state() private loading = true;
+  @state() private packageLoading = true;
   @state() private saving = false;
   @state() private packageOperation: PiPackageOperationState | undefined;
   @state() private error = "";
@@ -30,12 +32,13 @@ export class SettingsDialog extends LitElement {
   @state() private packageMessage = "";
   private savedMessageTimer: number | undefined;
   private loadRequestSeq = 0;
+  private packageLoadRequestSeq = 0;
   private packageMutationSeq = 0;
-  private lastRequestedPackageTargetId: string | undefined;
 
   override connectedCallback(): void {
     super.connectedCallback();
     void this.loadConfig();
+    void this.loadPackagesForTarget();
   }
 
   override disconnectedCallback(): void {
@@ -50,7 +53,7 @@ export class SettingsDialog extends LitElement {
     const currentTarget = this.packageTarget();
     if (previousTarget.id === currentTarget.id) return;
     this.resetPackageStateForTargetChange();
-    if (this.isConnected && this.lastRequestedPackageTargetId !== currentTarget.id) void this.loadConfig();
+    if (this.isConnected) void this.loadPackagesForTarget(currentTarget);
   }
 
   override render(): TemplateResult {
@@ -115,11 +118,11 @@ export class SettingsDialog extends LitElement {
         <settings-packages-panel
           .packagesResponse=${this.packagesResponse}
           .targetMachine=${this.packageTarget()}
-          .loading=${this.loading}
+          .loading=${this.packageLoading}
           .operation=${this.packageOperation}
           .error=${this.packageError}
           .operationMessage=${this.packageMessage}
-          .onReload=${() => this.loadConfig()}
+          .onReload=${() => this.loadPackagesForTarget()}
           .onInstallPackage=${(source: string) => this.installPiPackage(source)}
           .onRemovePackage=${(source: string, scope: PiPackageScope) => this.removePiPackage(source, scope)}
           .onUpdatePackage=${(source?: string) => this.updatePiPackage(source)}
@@ -184,32 +187,37 @@ export class SettingsDialog extends LitElement {
   }
 
   private async loadConfig(): Promise<void> {
-    const target = this.packageTarget();
     const requestSeq = ++this.loadRequestSeq;
-    this.lastRequestedPackageTargetId = target.id;
     this.loading = true;
     this.error = "";
-    this.packageError = "";
     try {
-      const [config, plugins, packages] = await Promise.allSettled([configApi.config(), pluginsApi.plugins(), piPackagesApi.packages(target.id)]);
-      if (!this.isCurrentLoad(requestSeq, target)) return;
+      const result = await loadGatewaySettingsData({
+        loadConfig: () => configApi.config(),
+        loadPlugins: () => pluginsApi.plugins(),
+      });
+      if (!this.isCurrentLoad(requestSeq)) return;
 
-      const errors: string[] = [];
-      if (config.status === "fulfilled") this.configResponse = config.value;
-      else errors.push(`config: ${errorMessage(config.reason)}`);
-
-      if (plugins.status === "fulfilled") this.pluginsResponse = plugins.value;
-      else errors.push(`PI WEB plugins: ${errorMessage(plugins.reason)}`);
-
-      if (packages.status === "fulfilled") this.packagesResponse = packages.value;
-      else {
-        this.packagesResponse = undefined;
-        this.packageError = `Failed to load Pi packages from ${piPackageTargetLabel(target)}: ${friendlyPiPackageErrorMessage(errorMessage(packages.reason), target)}`;
-      }
-
-      if (errors.length > 0) this.error = `Failed to load settings: ${errors.join("; ")}`;
+      if (result.config !== undefined) this.configResponse = result.config;
+      if (result.plugins !== undefined) this.pluginsResponse = result.plugins;
+      this.error = result.error;
     } finally {
-      if (this.isCurrentLoad(requestSeq, target)) this.loading = false;
+      if (this.isCurrentLoad(requestSeq)) this.loading = false;
+    }
+  }
+
+  private async loadPackagesForTarget(target = this.packageTarget()): Promise<void> {
+    const requestSeq = ++this.packageLoadRequestSeq;
+    this.packageLoading = true;
+    this.packageError = "";
+    this.packageMessage = "";
+    try {
+      const result = await loadPiPackagesData(target, (targetId) => piPackagesApi.packages(targetId));
+      if (!this.isCurrentPackageLoad(requestSeq, target)) return;
+
+      this.packagesResponse = result.packagesResponse;
+      this.packageError = result.error;
+    } finally {
+      if (this.isCurrentPackageLoad(requestSeq, target)) this.packageLoading = false;
     }
   }
 
@@ -233,8 +241,6 @@ export class SettingsDialog extends LitElement {
     this.saving = true;
     this.error = "";
     this.savedMessage = "";
-    this.packageMessage = "";
-    this.packageError = "";
     try {
       const response = await configApi.saveConfig(config);
       this.configResponse = response;
@@ -265,11 +271,11 @@ export class SettingsDialog extends LitElement {
   private async runPiPackageMutation(operation: PiPackageOperationState, label: string, target: PiPackageTargetContext, mutate: () => Promise<PiPackageMutationResponse>): Promise<void> {
     if (this.saving) throw new Error("A settings operation is already running.");
     const requestSeq = ++this.packageMutationSeq;
+    this.packageLoadRequestSeq += 1;
+    this.packageLoading = false;
     this.saving = true;
     this.packageOperation = operation;
-    this.error = "";
     this.packageError = "";
-    this.savedMessage = "";
     this.packageMessage = "";
     try {
       const response = await mutate();
@@ -303,8 +309,12 @@ export class SettingsDialog extends LitElement {
     return piPackageTargetContext(this.machine);
   }
 
-  private isCurrentLoad(requestSeq: number, target: PiPackageTargetContext): boolean {
-    return requestSeq === this.loadRequestSeq && this.isCurrentPackageTarget(target);
+  private isCurrentLoad(requestSeq: number): boolean {
+    return requestSeq === this.loadRequestSeq;
+  }
+
+  private isCurrentPackageLoad(requestSeq: number, target: PiPackageTargetContext): boolean {
+    return requestSeq === this.packageLoadRequestSeq && this.isCurrentPackageTarget(target);
   }
 
   private isCurrentPackageMutation(requestSeq: number, target: PiPackageTargetContext): boolean {
@@ -317,7 +327,9 @@ export class SettingsDialog extends LitElement {
 
   private resetPackageStateForTargetChange(): void {
     const hadPackageOperation = this.packageOperation !== undefined;
+    this.packageLoadRequestSeq += 1;
     this.packageMutationSeq += 1;
+    this.packageLoading = false;
     this.packageOperation = undefined;
     this.packageMessage = "";
     this.packageError = "";

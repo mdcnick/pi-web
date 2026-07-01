@@ -52,8 +52,11 @@ export class SettingsPackagesPanel extends LitElement {
   }
 
   private renderPackageList(packages: PiPackageInfo[], target: PiPackageTargetContext): TemplateResult {
-    const updateAllReason = updateAllPiPackagesDisabledReason(packages);
     const targetLabel = piPackageTargetLabel(target);
+    const packageListUnavailable = this.error !== "" && packages.length === 0;
+    const updateAllReason = updateAllPiPackagesDisabledReason(packages);
+    const showUpdateAllReason = updateAllReason !== undefined && (packages.length > 0 || (!this.loading && !packageListUnavailable));
+    const updateAllTitle = packageListUnavailable ? `Pi package list unavailable for ${targetLabel}` : updateAllReason ?? "Update all user-scope Pi packages";
     return html`
       <section class="package-section" aria-label="Configured Pi packages">
         <div class="package-toolbar">
@@ -61,17 +64,25 @@ export class SettingsPackagesPanel extends LitElement {
             <h3>Configured Pi packages</h3>
             <p>This list comes from Pi's package manager settings on ${targetLabel}.</p>
           </div>
-          <button class="secondary" title=${updateAllReason ?? "Update all user-scope Pi packages"} ?disabled=${this.isOperating || updateAllReason !== undefined} @click=${() => { void this.updatePackage(); }}>
+          <button class="secondary" title=${updateAllTitle} ?disabled=${this.isOperating || updateAllReason !== undefined} @click=${() => { void this.updatePackage(); }}>
             ${isPiPackageOperationPending(this.operation, "update-all") ? "Updating…" : "Update all"}
           </button>
         </div>
-        ${updateAllReason === undefined ? null : html`<div class="action-note">${updateAllReason}</div>`}
-        ${this.loading && packages.length === 0 ? html`<div class="loading-card">Loading Pi packages from ${targetLabel}…</div>` : packages.length === 0 ? html`<div class="loading-card">No Pi packages configured in Pi settings on ${targetLabel} yet.</div>` : html`
-          <div class="package-list">
-            ${packages.map((packageInfo) => this.renderPackage(packageInfo))}
-          </div>
-        `}
+        ${showUpdateAllReason ? html`<div class="action-note">${updateAllReason}</div>` : null}
+        ${this.loading && packages.length > 0 ? html`<div class="action-note">Refreshing Pi packages from ${targetLabel}…</div>` : null}
+        ${this.renderPackageListContent(packages, targetLabel)}
       </section>
+    `;
+  }
+
+  private renderPackageListContent(packages: PiPackageInfo[], targetLabel: string): TemplateResult {
+    if (this.loading && packages.length === 0) return html`<div class="loading-card">Loading Pi packages from ${targetLabel}…</div>`;
+    if (this.error !== "" && packages.length === 0) return html`<div class="loading-card">Pi package list unavailable for ${targetLabel}. Use Reload to try again.</div>`;
+    if (packages.length === 0) return html`<div class="loading-card">No Pi packages configured in Pi settings on ${targetLabel} yet.</div>`;
+    return html`
+      <div class="package-list">
+        ${packages.map((packageInfo) => this.renderPackage(packageInfo))}
+      </div>
     `;
   }
 
