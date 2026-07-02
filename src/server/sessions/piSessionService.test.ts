@@ -125,6 +125,7 @@ function fakeRuntime(sessionId = "session-1", patch: Partial<TestSession> = {}) 
     setSessionName: (name: string) => { session.sessionName = name; },
     compact: () => Promise.resolve({ summary: "", tokensBefore: 0 }),
     getUserMessagesForForking: () => [],
+    agent: { streamFn: () => { throw new Error("streamFn should not be called in this test"); } },
     ...patch,
   };
   const runtime: PiSessionRuntime = {
@@ -166,6 +167,23 @@ function emptyArchiveStore(): NonNullable<PiSessionServiceDependencies["archiveS
 }
 
 describe("PiSessionService", () => {
+  it("exposes the session's agent.streamFn for one-off model calls", async () => {
+    const hub = new CapturingSessionEventHub();
+    const streamFn = vi.fn();
+    const fake = fakeRuntime("stream-session", { agent: { streamFn } });
+    const service = new PiSessionService(hub, {
+      createAgentRuntime: runtimeCreator(fake.runtime),
+      sessionManager: sessionGateway([]),
+      heartbeatIntervalMs: 60_000,
+    });
+
+    await service.start("/workspace");
+
+    expect(fake.session.agent.streamFn).toBe(streamFn);
+
+    await service.dispose();
+  });
+
   it("starts sessions through an injected runtime creator", async () => {
     const hub = new CapturingSessionEventHub();
     const fake = fakeRuntime();
