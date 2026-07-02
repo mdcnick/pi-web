@@ -66,20 +66,6 @@ pi-web uninstall
 
 For more install options, including one-line install, Pi package install, WSL/manual usage, and remote access, see the [installation guide](https://pi-web.dev/install).
 
-Common alternatives:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/jmfederico/pi-web/main/install.sh | sh
-```
-
-PI WEB is also published as a Pi package:
-
-```bash
-pi install npm:@jmfederico/pi-web
-```
-
-In Pi, use `/pi-web install`, `/pi-web status`, `/pi-web logs`, `/pi-web restart`, `/pi-web doctor`, and `/pi-web version`.
-
 ## Core model
 
 PI WEB organizes work like this:
@@ -167,24 +153,6 @@ For the split development setup:
 npm run dev:sessiond
 npm run dev:web
 npm run dev:client
-```
-
-Or install the split development setup as native per-user services from the checkout:
-
-```bash
-pi-web install --dev
-```
-
-`pi-web install --dev` writes the session daemon plus a UI development service using the native user-service backend. `pi-web uninstall` removes both production and development service files; no uninstall flags are needed.
-
-`dev:web` also watches bundled plugin TypeScript and rebuilds the browser-loaded plugin JavaScript under `dist/pi-web-plugins/`. You can restart `dev:web` or `dev:client` without stopping active Pi sessions.
-
-For a production-style run from a checkout:
-
-```bash
-npm run build
-npm run start:sessiond
-PI_WEB_PORT=8504 npm start
 ```
 
 Validate changes with:
