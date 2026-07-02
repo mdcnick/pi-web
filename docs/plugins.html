@@ -297,11 +297,11 @@ After editing, check the manifest endpoint and browser-console failure cases.</c
   "version": 1,
   "tasks": [
     {
-      "id": "docker.start",
-      "title": "Start Docker",
-      "group": "Docker",
-      "description": "Start the local Docker Compose environment.",
-      "command": "./docker/scripts/docker-compose-dev up -d"
+      "id": "app.start",
+      "title": "Start app",
+      "group": "Development",
+      "description": "Start the local development server.",
+      "command": "npm run dev"
     },
     {
       "id": "db.reset",

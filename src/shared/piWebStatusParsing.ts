@@ -77,13 +77,15 @@ export function parsePiWebInstallationInfo(value: unknown): PiWebInstallationInf
   const source = value["source"];
   const scope = value["scope"];
   const npmRoot = value["npmRoot"];
-  if (kind !== "pi-package" && kind !== "npm-global" && kind !== "local" && kind !== "unknown") return undefined;
+  const dockerMode = value["dockerMode"];
+  if (kind !== "pi-package" && kind !== "npm-global" && kind !== "local" && kind !== "docker" && kind !== "unknown") return undefined;
   return {
     kind,
     ...(typeof path === "string" ? { path } : {}),
     ...(typeof source === "string" ? { source } : {}),
     ...(scope === "user" || scope === "project" ? { scope } : {}),
     ...(typeof npmRoot === "string" ? { npmRoot } : {}),
+    ...(dockerMode === "runtime" || dockerMode === "dev" ? { dockerMode } : {}),
   };
 }
 

@@ -6,11 +6,20 @@ import { PiWebPluginService, type PiPackageProvider } from "./piWebPluginService
 
 let tempDir: string;
 
+const originalDockerRuntime = process.env["PI_WEB_DOCKER_RUNTIME"];
+const originalDockerMode = process.env["PI_WEB_DOCKER_MODE"];
+const originalDockerDevRepoRoot = process.env["PI_WEB_DOCKER_DEV_REPO_ROOT"];
+const originalDockerInstallDir = process.env["PI_WEB_DOCKER_INSTALL_DIR"];
+
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), "pi-web-plugin-service-test-"));
 });
 
 afterEach(async () => {
+  restoreEnv("PI_WEB_DOCKER_RUNTIME", originalDockerRuntime);
+  restoreEnv("PI_WEB_DOCKER_MODE", originalDockerMode);
+  restoreEnv("PI_WEB_DOCKER_DEV_REPO_ROOT", originalDockerDevRepoRoot);
+  restoreEnv("PI_WEB_DOCKER_INSTALL_DIR", originalDockerInstallDir);
   await rm(tempDir, { recursive: true, force: true });
 });
 
@@ -45,6 +54,20 @@ describe("PiWebPluginService", () => {
 
     await expect(service.manifest()).resolves.toMatchObject({ plugins: [{ id: "updates", machineSpecific: true }] });
     await expect(service.plugins()).resolves.toMatchObject({ plugins: [{ id: "updates", machineSpecific: true, enabled: true }] });
+  });
+
+  it("adds Docker runtime hints to the Updates plugin module URL", async () => {
+    process.env["PI_WEB_DOCKER_RUNTIME"] = "1";
+    process.env["PI_WEB_DOCKER_MODE"] = "dev";
+    await writePlugin(join(tempDir, "plugins", "updates"), {
+      packageJson: { piWeb: { plugins: [{ id: "updates", module: "pi-web-plugin.js", machineSpecific: true }] } },
+      files: { "pi-web-plugin.js": "export default {};" },
+    });
+
+    const service = new PiWebPluginService({ roots: [{ path: join(tempDir, "plugins"), source: "test", scope: "local" }], packageProvider: false });
+
+    const manifest = await service.manifest();
+    expect(manifest.plugins[0]?.module).toMatch(/^\/pi-web-plugins\/updates\/pi-web-plugin\.js\?v=\d+&piWebDockerMode=dev$/u);
   });
 
   it("discovers Pi package plugins through an injected package provider", async () => {
@@ -225,4 +248,9 @@ async function writePlugin(root: string, options: { packageJson: unknown; files:
     await mkdir(join(filePath, ".."), { recursive: true });
     await writeFile(filePath, content);
   }
+}
+
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) Reflect.deleteProperty(process.env, key);
+  else process.env[key] = value;
 }

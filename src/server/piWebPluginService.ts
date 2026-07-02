@@ -135,7 +135,7 @@ export class PiWebPluginService {
   private pluginInfo(plugin: PluginRecord, config: PiWebConfig): PiWebPluginInfo {
     return {
       id: plugin.id,
-      module: `/pi-web-plugins/${encodeURIComponent(plugin.id)}/${plugin.entryFile}?v=${encodeURIComponent(plugin.version)}`,
+      module: `/pi-web-plugins/${encodeURIComponent(plugin.id)}/${plugin.entryFile}?${pluginModuleQuery(plugin)}`,
       source: plugin.source,
       scope: plugin.scope,
       machineSpecific: plugin.machineSpecific,
@@ -185,6 +185,35 @@ function defaultPluginRoots(cwd: string): LocalPluginRoot[] {
 
 function bundledPluginRoot(packageRoot: string): string {
   return join(packageRoot, "dist", "pi-web-plugins");
+}
+
+function pluginModuleQuery(plugin: PluginRecord): string {
+  const params = new URLSearchParams({ v: plugin.version });
+  const dockerMode = plugin.id === "updates" ? dockerModeFromEnv() : undefined;
+  if (dockerMode !== undefined) params.set("piWebDockerMode", dockerMode);
+  return params.toString();
+}
+
+function dockerModeFromEnv(): "runtime" | "dev" | undefined {
+  if (!isTruthyEnv("PI_WEB_DOCKER_RUNTIME")) return undefined;
+  const mode = process.env["PI_WEB_DOCKER_MODE"];
+  if (mode === "runtime" || mode === "dev") return mode;
+  if (firstNonEmptyEnv("PI_WEB_DOCKER_DEV_REPO_ROOT") !== undefined) return "dev";
+  if (firstNonEmptyEnv("PI_WEB_DOCKER_INSTALL_DIR") !== undefined) return "runtime";
+  return undefined;
+}
+
+function firstNonEmptyEnv(...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value !== undefined && value !== "") return value;
+  }
+  return undefined;
+}
+
+function isTruthyEnv(key: string): boolean {
+  const value = process.env[key];
+  return value !== undefined && value !== "" && value !== "0" && value.toLowerCase() !== "false";
 }
 
 function sourceCheckoutPluginRoots(cwd: string): LocalPluginRoot[] {

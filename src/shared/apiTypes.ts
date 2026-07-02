@@ -557,7 +557,8 @@ export interface TerminalCommandRunFilter {
 
 export type PiWebServiceComponent = "web" | "sessiond";
 export type PiWebStatusSeverity = "info" | "warning" | "error";
-export type PiWebInstallationKind = "pi-package" | "npm-global" | "local" | "unknown";
+export type PiWebInstallationKind = "pi-package" | "npm-global" | "local" | "docker" | "unknown";
+export type PiWebDockerMode = "runtime" | "dev";
 
 export interface PiWebInstallationInfo {
   kind: PiWebInstallationKind;
@@ -565,6 +566,7 @@ export interface PiWebInstallationInfo {
   source?: string;
   scope?: "user" | "project";
   npmRoot?: string;
+  dockerMode?: PiWebDockerMode;
 }
 
 export interface PiWebComponentStatus {

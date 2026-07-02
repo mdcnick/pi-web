@@ -1,6 +1,6 @@
 import type { TemplateResult } from "lit";
 import type { HtmlTemplateTag, PiWebComponentStatus, PiWebPlugin, PiWebStatusResponse, PluginRuntimeState, WorkspacePanelTerminal } from "@jmfederico/pi-web/plugin-api";
-import { additionalCommands, formatVersion, installationLabel, messageCount, recommendedCommand, shouldShowUpdatesPanel, statusFor } from "./updatesLogic.js";
+import { additionalCommands, fallbackDockerStatus, formatVersion, installationLabel, messageCount, recommendedCommand, shouldShowUpdatesPanel, statusFor, type UpdatesRuntimeHint } from "./updatesLogic.js";
 
 function runCommandInTerminal(terminal: WorkspacePanelTerminal, label: string, command: string): void {
   void terminal.runCommand({
@@ -48,6 +48,17 @@ function renderCommand(html: HtmlTemplateTag, terminal: WorkspacePanelTerminal |
   `;
 }
 
+function updatesRuntimeHintFromModuleUrl(moduleUrl: string): UpdatesRuntimeHint {
+  try {
+    const dockerMode = new URL(moduleUrl).searchParams.get("piWebDockerMode");
+    return dockerMode === "runtime" || dockerMode === "dev" ? { dockerMode } : {};
+  } catch {
+    return {};
+  }
+}
+
+const runtimeHint = updatesRuntimeHintFromModuleUrl(import.meta.url);
+
 function renderCommands(html: HtmlTemplateTag, terminal: WorkspacePanelTerminal | undefined, status: PiWebStatusResponse): TemplateResult | undefined {
   const recommended = recommendedCommand(status);
   const additional = additionalCommands(status, recommended);
@@ -71,7 +82,7 @@ function renderCommands(html: HtmlTemplateTag, terminal: WorkspacePanelTerminal 
 }
 
 function renderUpdatesPanel(html: HtmlTemplateTag, terminal: WorkspacePanelTerminal | undefined, state: PluginRuntimeState | undefined): TemplateResult {
-  const status = statusFor(state);
+  const status = statusFor(state) ?? fallbackDockerStatus(runtimeHint);
   if (status === undefined) {
     return html`
       <section class="toolbar"><strong>Updates</strong></section>
@@ -157,7 +168,7 @@ const plugin: PiWebPlugin = {
             </svg>
           `,
           order: 100,
-          visible: (context) => shouldShowUpdatesPanel(context.state),
+          visible: (context) => shouldShowUpdatesPanel(context.state, runtimeHint),
           badge: (context) => {
             const count = messageCount(context.state);
             return count > 0 ? count : undefined;

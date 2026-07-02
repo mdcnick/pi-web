@@ -761,15 +761,18 @@ function optionalPiWebInstallationInfo(value: unknown): PiWebInstallationInfo | 
   if (value === undefined) return undefined;
   const record = requireRecord(value);
   const kind = requireString(record, "kind");
-  if (kind !== "pi-package" && kind !== "npm-global" && kind !== "local" && kind !== "unknown") throw new Error("Invalid PI WEB installation kind");
+  if (kind !== "pi-package" && kind !== "npm-global" && kind !== "local" && kind !== "docker" && kind !== "unknown") throw new Error("Invalid PI WEB installation kind");
   const scope = record["scope"];
   if (scope !== undefined && scope !== "user" && scope !== "project") throw new Error("Invalid PI WEB installation scope");
+  const dockerMode = record["dockerMode"];
+  if (dockerMode !== undefined && dockerMode !== "runtime" && dockerMode !== "dev") throw new Error("Invalid PI WEB Docker mode");
   return {
     kind,
     ...optionalField("path", optionalString(record, "path")),
     ...optionalField("source", optionalString(record, "source")),
     ...(scope === undefined ? {} : { scope }),
     ...optionalField("npmRoot", optionalString(record, "npmRoot")),
+    ...(dockerMode === undefined ? {} : { dockerMode }),
   };
 }
 
