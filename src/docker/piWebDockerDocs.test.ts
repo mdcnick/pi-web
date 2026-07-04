@@ -48,7 +48,8 @@ describe("pi-web-docker documentation", () => {
 });
 
 function readDockerCommandMatrix(dockerReadme: string): string[] {
-  const commandMatrixSection = dockerReadme.split("### Command matrix\n")[1]?.split("\n### Installer options")[0] ?? "";
+  const normalizedReadme = normalizeLineEndings(dockerReadme);
+  const commandMatrixSection = normalizedReadme.split("### Command matrix\n")[1]?.split("\n### Installer options")[0] ?? "";
   return Array.from(commandMatrixSection.matchAll(/^\| `([^`]+)` \|/gm), (match) => {
     const command = match[1];
     if (command === undefined) throw new Error("Docker command matrix row did not include a command");
@@ -57,7 +58,8 @@ function readDockerCommandMatrix(dockerReadme: string): string[] {
 }
 
 function readEntrypointCommandCases(dockerEntrypoint: string): Set<string> {
-  const commandCaseBlock = dockerEntrypoint.slice(dockerEntrypoint.indexOf('case "$command_name" in'));
+  const normalizedEntrypoint = normalizeLineEndings(dockerEntrypoint);
+  const commandCaseBlock = normalizedEntrypoint.slice(normalizedEntrypoint.indexOf('case "$command_name" in'));
   const commandCases = new Set<string>();
   for (const line of commandCaseBlock.split("\n")) {
     const match = /^ {2}([a-z][a-z-]*(?:\|[a-z][a-z-]*)*)(?:\|__run-detached)?\)$/.exec(line);
@@ -65,6 +67,10 @@ function readEntrypointCommandCases(dockerEntrypoint: string): Set<string> {
     for (const command of match[1].split("|")) commandCases.add(command);
   }
   return commandCases;
+}
+
+function normalizeLineEndings(content: string): string {
+  return content.replace(/\r\n?/g, "\n");
 }
 
 async function readRepoFile(relativePath: string): Promise<string> {
