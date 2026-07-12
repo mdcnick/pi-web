@@ -131,7 +131,7 @@ Rows with JSON key `—` are runtime-only environment variables, not config-file
 
 The session daemon owns both archive locations. Restart the session daemon after setting or changing `PI_WEB_DATA_DIR`; restart the web/API process as well so its other managed-state stores use the same root.
 
-PI WEB does not automatically migrate existing managed state. Archives created by earlier releases while a custom `PI_WEB_DATA_DIR` was already set may remain under `~/.pi-web` and will not appear automatically after upgrading. Stop the session daemon and back up both locations before reconciling them manually. The archive index stores absolute `archivePath` values, so update those values if archived files are moved to a different path.
+PI WEB does not move existing managed state when `PI_WEB_DATA_DIR` changes. Stop the session daemon and back up the source and destination before moving archive data manually. The archive index stores absolute `archivePath` values, so update those values when archived files move to a different path.
 
 ### External path access
 
