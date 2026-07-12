@@ -95,19 +95,6 @@ Use a private network, SSH tunnel, trusted reverse proxy, or federated PI WEB ma
 
 Read more: [Remote-first development](https://pi-web.dev/remote-first)
 
-## Reverse proxy deployments
-
-The published production client is deployment-independent. The same package works at the origin root (`/`) or at canonical nested prefixes such as `/ai/` and `/test/ai/`; do not rebuild or configure PI WEB for a particular prefix.
-
-For a root deployment, proxy `/` directly to `http://127.0.0.1:8504` without rewriting the path. For a nested deployment:
-
-1. Redirect the slashless prefix (`/ai`) to its trailing-slash form (`/ai/`).
-2. Strip the prefix before forwarding requests to PI WEB.
-3. Apply authentication to the whole prefixed application.
-4. Proxy HTTP and WebSocket traffic through the same prefix; do not create unprotected API or plugin exceptions.
-
-See the [reverse proxy installation guide](https://pi-web.dev/install#reverse-proxy-prefix) for the complete Nginx configuration, TLS and authentication guidance, and deeper prefixes such as `/test/ai/`.
-
 ## Machines and fleets
 
 PI WEB can register other PI WEB runtimes as remote machines. One browser-facing PI WEB instance can proxy projects, files, git state, sessions, terminals, activity, Pi package management, and selected-machine settings from trusted remote machines.
