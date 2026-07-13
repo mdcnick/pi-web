@@ -37,7 +37,10 @@ describe("PiWebPluginService", () => {
       plugins: [expect.objectContaining({ id: "info", source: "test", scope: "local", machineSpecific: false })],
     });
     const manifest = await service.manifest();
-    expect(manifest.plugins[0]?.module).toMatch(/^\/pi-web-plugins\/info\/pi-web-plugin\.js\?v=\d+$/u);
+    const module = manifest.plugins[0]?.module;
+    expect(module).toMatch(/^\/pi-web-plugins\/info\/pi-web-plugin\.js\?v=\d+$/u);
+    expect(new URL(module ?? "", "http://old-gateway.test/pi-web-plugins/info/").pathname).toBe("/pi-web-plugins/info/pi-web-plugin.js");
+    await expect(service.plugins()).resolves.toMatchObject({ plugins: [{ module }] });
 
     const asset = await service.readAsset("info", "pi-web-plugin.js");
     expect(asset?.contentType).toBe("application/javascript; charset=utf-8");
@@ -105,7 +108,7 @@ describe("PiWebPluginService", () => {
     const service = new PiWebPluginService({ roots: [{ path: join(tempDir, "plugins"), source: "test", scope: "local" }], packageProvider: false });
 
     const manifest = await service.manifest();
-    const moduleUrl = new URL(manifest.plugins[0]?.module ?? "", "http://pi-web.test");
+    const moduleUrl = new URL(manifest.plugins[0]?.module ?? "", "http://pi-web.test/pi-web-plugins/manifest.json");
     expect(moduleUrl.pathname).toBe("/pi-web-plugins/updates/pi-web-plugin.js");
     expect(moduleUrl.searchParams.get("v")).toMatch(/^\d+$/u);
     expect(moduleUrl.searchParams.get("piWebDockerMode")).toBe("dev");
