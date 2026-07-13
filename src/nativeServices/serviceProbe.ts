@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
-import { join } from "node:path";
+import { posix as posixPath } from "node:path";
 import { performance } from "node:perf_hooks";
 import { randomUUID } from "node:crypto";
 import type {
@@ -128,13 +128,13 @@ export class LaunchdNativeServiceProbe implements NativeServiceAuthoritativeProb
 
     try {
       directory = await this.dependencies.fileSystem.createTemporaryDirectory(
-        join(tmpdir(), "pi-web-launchd-probe-"),
+        posixPath.join(tmpdir(), "pi-web-launchd-probe-"),
       );
-      const plistPath = join(directory, "probe.plist");
-      const stdoutPath = join(directory, "stdout.log");
-      const stderrPath = join(directory, "stderr.log");
-      const pendingResultPath = join(directory, "result.pending");
-      const resultPath = join(directory, "result.log");
+      const plistPath = posixPath.join(directory, "probe.plist");
+      const stdoutPath = posixPath.join(directory, "stdout.log");
+      const stderrPath = posixPath.join(directory, "stderr.log");
+      const pendingResultPath = posixPath.join(directory, "result.pending");
+      const resultPath = posixPath.join(directory, "result.log");
       const command = prerequisiteProbeCommand(
         request.shell.name,
         request.prerequisites,
