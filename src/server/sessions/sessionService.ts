@@ -25,15 +25,16 @@ export type SessionRouteLookup = string | SessionRouteRef;
 /**
  * Route-facing session contract for PI WEB's HTTP/WebSocket API.
  *
- * Keep this surface neutral: implementations may be backed by the native Pi SDK,
- * an out-of-process agent bridge, or another daemon. Pi-specific lifecycle hooks
- * such as auth-change handling and daemon shutdown stay on the concrete service.
+ * Keep transport concerns separate from the bundled Pi SDK implementation so
+ * routes remain testable. Pi-specific lifecycle hooks such as auth-change
+ * handling and daemon shutdown stay on the concrete service.
  */
 export interface SessionRouteService {
   list(cwd: string): Promise<ClientSession[]>;
   start(cwd: string): Promise<ClientSession>;
   messages(ref: SessionRouteLookup, page?: { before?: number; limit?: number }): Promise<unknown[] | ClientMessagePage>;
   status(ref: SessionRouteLookup): Promise<ClientSessionStatus>;
+  clearQueue(ref: SessionRouteLookup): Promise<ClientSessionStatus>;
   availableModels(ref: SessionRouteLookup): Promise<ClientSessionModel[]>;
   setModel(ref: SessionRouteLookup, provider: string, modelId: string): Promise<ClientSessionStatus>;
   cycleModel(ref: SessionRouteLookup, direction: "forward" | "backward"): Promise<ClientSessionStatus>;

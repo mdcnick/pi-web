@@ -2,4 +2,4 @@
 "@jmfederico/pi-web": patch
 ---
 
-Add configurable agent runtime settings so PI WEB can use alternate Pi-compatible commands and isolated agent state/session directories, with web-side status and plugin views re-reading saved config.
+Add selectable Pi-compatible agent profiles and companion CLIs for isolated auth, models, settings, sessions, Pi packages, plugins, diagnostics, and safe update commands. Settings shows when a session-daemon restart is required, and mixed-version remote saves fail instead of reporting false success. The embedded runtime remains the bundled Pi SDK.

@@ -250,6 +250,36 @@ describe("session API compatibility", () => {
     expect(url).toBe("https://pi.example.test/api/machines/remote%20a/sessions/s%201/prompt");
     expect(JSON.parse(requestBody(init))).toEqual({ cwd: "/repo", text: "hello" });
   });
+
+  it("clears a session queue through an encoded machine route and parses the returned status", async () => {
+    const fetchMock = stubJsonFetch({
+      sessionId: "s /?",
+      isStreaming: true,
+      isCompacting: false,
+      isBashRunning: false,
+      pendingMessageCount: 0,
+      tokens: { input: 3, output: 2, cacheRead: 1, cacheWrite: 0, total: 6 },
+      cost: 0.25,
+      ignored: "not part of SessionStatus",
+    });
+
+    await expect(sessionsApi.clearQueue({ id: "s /?", cwd: "/repo with spaces" }, "remote /?")).resolves.toEqual({
+      sessionId: "s /?",
+      isStreaming: true,
+      isCompacting: false,
+      isBashRunning: false,
+      pendingMessageCount: 0,
+      queuedMessages: [],
+      tokens: { input: 3, output: 2, cacheRead: 1, cacheWrite: 0, total: 6 },
+      cost: 0.25,
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchCall(fetchMock, 0);
+    expect(url).toBe("https://pi.example.test/api/machines/remote%20%2F%3F/sessions/s%20%2F%3F/queue/clear");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(requestBody(init))).toEqual({ cwd: "/repo with spaces" });
+  });
 });
 
 describe("machine-scoped file suggestion API", () => {

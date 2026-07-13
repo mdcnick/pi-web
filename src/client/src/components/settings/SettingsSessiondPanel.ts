@@ -69,7 +69,7 @@ export class SettingsSessiondPanel extends LitElement {
             <code>${config.path}</code>
           </div>
           <form class="profile-form" aria-label="Pi-compatible agent profile" @submit=${(event: Event) => { void this.saveAgentProfile(event); }}>
-            ${profileEditingSupported ? null : html`<div class="profile-support-message">${this.agentProfileSupport.message ?? "Agent profile editing is unavailable for this machine."}</div>`}
+            ${profileEditingSupported ? null : html`<div class="profile-support-message">${this.agentProfileSupport.message ?? "Pi-compatible agent profile editing is unavailable for this machine."}</div>`}
             <label class="field">
               <span class="field-heading">
                 <span>Companion CLI command</span>
@@ -89,7 +89,7 @@ export class SettingsSessiondPanel extends LitElement {
             </label>
             <label class="field">
               <span class="field-heading">
-                <span>Agent state directory</span>
+                <span>Profile state directory</span>
                 ${effectiveAgentDirOverridden ? html`<span class="override-badge">environment override</span>` : null}
               </span>
               <input
@@ -102,7 +102,7 @@ export class SettingsSessiondPanel extends LitElement {
                 ?disabled=${this.loading || this.saving || !profileEditingSupported || agentDirLocked}
                 @input=${(event: Event) => { this.updateAgentDraft({ dir: inputValue(event) }); }}
               >
-              <small>Choose the compatible auth, models, settings, and sessions PI WEB reads. An alternate command and its required state directory are saved together.</small>
+              <small>Choose the Pi-compatible auth, models, settings, and sessions PI WEB reads. An alternate command and its required state directory are saved together.</small>
             </label>
             <footer class="form-actions">
               <button class="primary" type="submit" ?disabled=${this.loading || this.saving || !profileEditingSupported || (agentCommandOverridden && agentDirLocked)}>${this.saving ? "Saving…" : "Save agent profile"}</button>
@@ -167,13 +167,13 @@ export class SettingsSessiondPanel extends LitElement {
     if (activation === "restart-required") {
       notices.push({
         type: "warning",
-        title: `Agent profile restart required on ${this.targetLabel}`,
+        title: `Pi-compatible agent profile restart required on ${this.targetLabel}`,
         content: html`The desired profile differs from the active session-daemon profile. Run <code>pi-web restart</code> on that machine (or restart its session daemon service) to apply the command and state directory together.`,
       });
     } else if (config !== undefined && activation === "unavailable" && this.agentProfileSupport.state === "supported") {
       notices.push({
         type: "info",
-        title: `Active agent profile unavailable on ${this.targetLabel}`,
+        title: `Active Pi-compatible agent profile unavailable on ${this.targetLabel}`,
         content: "PI WEB cannot compare the desired profile with the running session daemon. Reload after the daemon is available.",
       });
     }
@@ -274,5 +274,5 @@ function errorMessage(error: unknown): string {
 }
 
 function sessiondDescription(targetLabel: string): string {
-  return `These settings affect the long-lived session runtime on ${targetLabel}. Changes are saved immediately but only take effect after the session daemon on that machine restarts.`;
+  return `Select the Pi-compatible agent profile and companion CLI for ${targetLabel}. Changes are saved immediately but only take effect after the session daemon on that machine restarts.`;
 }

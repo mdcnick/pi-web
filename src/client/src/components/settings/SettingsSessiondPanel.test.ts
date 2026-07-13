@@ -19,14 +19,14 @@ describe("settings-sessiond-panel layout", () => {
 
     expectTextOrder(rendered, [
       "Session daemon",
-      "These settings affect the long-lived session runtime on Lab Mac (remote machine).",
+      "Select the Pi-compatible agent profile and companion CLI for Lab Mac (remote machine).",
       "Reload",
-      "Agent profile restart required on Lab Mac (remote machine)",
+      "Pi-compatible agent profile restart required on Lab Mac (remote machine)",
       "Run <code>pi-web restart</code> on that machine",
       "Config file",
       "Companion CLI command",
       "agent-lab",
-      "Agent state directory",
+      "Profile state directory",
       "/srv/agent-lab",
       "Allow agents to start sessions",
     ]);
@@ -44,7 +44,7 @@ describe("settings-sessiond-panel layout", () => {
     expectTextOrder(rendered, [
       "Failed to save session-daemon config.",
       "Session daemon settings saved.",
-      "Agent profile restart required on local (local gateway)",
+      "Pi-compatible agent profile restart required on local (local gateway)",
       "Config file",
     ]);
   });

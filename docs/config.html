@@ -81,7 +81,7 @@
           <p>
             PI WEB configuration covers the machine-local and project-local settings you usually need: bind address,
             trusted development-host settings, UI preferences, PI WEB plugin enablement, file-explorer path access,
-            manual upload defaults, upload limits, agent runtime selection, and session-daemon tools.
+            manual upload defaults, upload limits, Pi-compatible agent profiles and companion CLIs, and session-daemon tools.
           </p>
         </div>
       </section>
@@ -98,7 +98,7 @@
             <a href="#keys">Config matrix</a>
             <a href="#path-access">External path access</a>
             <a href="#manual-uploads">Manual uploads</a>
-            <a href="#agent-runtime">Agent runtime</a>
+            <a href="#agent-runtime">Agent profile and companion CLI</a>
             <a href="#session-tools">Session tools</a>
             <a href="#completion-tools">Completion tools</a>
           </aside>
@@ -113,8 +113,8 @@
               </ul>
               <p>
                 Each PI WEB machine has its own config. When using Fleet/machine federation, Settings uses the selected
-                machine for config that affects work running there: agent runtime selection, session daemon tools,
-                PI WEB plugin enablement, external path access, and upload defaults. Gateway/browser-only settings stay local to the gateway:
+                machine for config that affects work running there: the Pi-compatible agent profile and companion CLI,
+                session daemon tools, PI WEB plugin enablement, external path access, and upload defaults. Gateway/browser-only settings stay local to the gateway:
                 keyboard shortcuts, remote machine registry/tokens, and gateway host/port/allowed-hosts. Remote servers
                 that do not advertise selected-machine settings support report those settings as unavailable instead of
                 silently falling back to the gateway.
@@ -334,7 +334,7 @@
                       <td>Restart web/API and session daemon on that machine</td>
                     </tr>
                     <tr>
-                      <td>Agent CLI command</td>
+                      <td>Companion CLI command</td>
                       <td><code>agent.command</code></td>
                       <td><code>PI_WEB_AGENT_COMMAND</code></td>
                       <td>Global/session daemon</td>
@@ -342,12 +342,12 @@
                       <td>Restart session daemon on that machine; affects doctor/status/update checks</td>
                     </tr>
                     <tr>
-                      <td>Agent state directory</td>
+                      <td>Agent profile state directory</td>
                       <td><code>agent.dir</code></td>
                       <td><code>PI_WEB_AGENT_DIR</code> (<code>PI_CODING_AGENT_DIR</code> for Pi compatibility)</td>
                       <td>Global/session daemon</td>
                       <td>Not supported locally</td>
-                      <td>Restart session daemon on that machine; affects auth, models, settings, and sessions</td>
+                      <td>Restart session daemon on that machine; affects auth, models, settings, sessions, Pi packages, and package-backed plugins</td>
                     </tr>
                     <tr>
                       <td>Agent can spawn sessions</td>
@@ -455,7 +455,7 @@
                       <td>Restart web/API; advanced state override</td>
                     </tr>
                     <tr>
-                      <td>Agent session storage directory</td>
+                      <td>Agent profile session storage directory</td>
                       <td>—</td>
                       <td><code>PI_WEB_AGENT_SESSION_DIR</code> (<code>PI_CODING_AGENT_SESSION_DIR</code> for Pi compatibility)</td>
                       <td>Session daemon env</td>
@@ -463,7 +463,7 @@
                       <td>Restart session daemon; env-only session storage override</td>
                     </tr>
                     <tr>
-                      <td>Agent config directory</td>
+                      <td>Agent profile state directory</td>
                       <td>—</td>
                       <td><code>PI_WEB_AGENT_DIR</code> (<code>PI_CODING_AGENT_DIR</code> for Pi compatibility)</td>
                       <td>Web/API + session daemon env</td>
@@ -537,46 +537,63 @@
             </section>
 
             <section id="agent-runtime">
-              <h2>Agent runtime</h2>
+              <h2>Pi-compatible agent profile and companion CLI</h2>
               <p>
-                <code>agent.command</code> controls which Pi-compatible CLI PI WEB checks in doctor/status/update flows.
-                It defaults to <code>pi</code>. Set it only when diagnostics and package-managed update checks should target
-                another compatible command; the embedded session runtime still uses PI WEB's SDK integration.
+                <code>agent.command</code> selects the Pi-compatible companion CLI used by <code>pi-web doctor</code> and,
+                when it can be generated safely, package-managed update commands. It defaults to <code>pi</code>. This
+                setting does <strong>not</strong> replace the embedded runtime: every session continues to use PI WEB's
+                bundled Pi SDK.
               </p>
               <p>
-                <code>agent.dir</code> controls which compatible agent state directory PI WEB reads for auth providers,
-                model settings, settings, and session metadata. It defaults to <code>~/.pi/agent</code> only for the default
-                <code>pi</code> command. Set it explicitly when you want an isolated Pi profile or when
-                <code>agent.command</code> points at another compatible CLI.
+                <code>agent.dir</code> selects the Pi-compatible state profile used for auth providers, models, settings,
+                sessions, Pi packages, and Pi-package-backed PI WEB plugin discovery. It defaults to
+                <code>~/.pi/agent</code> only for a canonical Pi companion command. The directory must use the data layout
+                supported by the bundled Pi SDK; PI WEB does not load or convert incompatible fork formats, migrate
+                profile data, or repartition PI WEB-managed archives when the profile changes.
               </p>
               <div class="code-card">
                 <pre><code>{
   "agent": {
-    "command": "my-pi-fork",
-    "dir": "/opt/my-pi-fork/agent"
+    "command": "pi-lab",
+    "dir": "/opt/pi-profiles/lab"
   }
 }</code></pre>
               </div>
               <p>
-                For example, a fork profile can set <code>agent.command</code> to <code>my-pi-fork</code> and
-                <code>agent.dir</code> to <code>/opt/my-pi-fork/agent</code>.
+                An alternate command always requires an explicit state directory. The command must be a safe bare
+                executable name such as <code>pi-lab</code> or a host-absolute executable path such as
+                <code>/opt/pi/bin/pi</code>; relative paths, shell expressions, and launcher strings are rejected. The
+                state directory must be host-absolute or start with <code>~</code>. In a federated save, the gateway
+                transports Unix and Windows absolute paths without reinterpreting them, and the target machine validates
+                and returns the persisted profile.
               </p>
               <p>
                 Environment variables take precedence over the config file. <code>PI_WEB_AGENT_COMMAND</code> selects the
-                command, <code>PI_WEB_AGENT_DIR</code> sets the state directory, and <code>PI_WEB_AGENT_SESSION_DIR</code>
-                overrides session storage separately from <code>agent.dir</code>. Existing Pi Coding Agent env names
-                (<code>PI_CODING_AGENT_DIR</code> and <code>PI_CODING_AGENT_SESSION_DIR</code>) remain supported only for
-                Pi compatibility; alternate commands should use the explicit PI WEB variables or config keys.
+                companion CLI, <code>PI_WEB_AGENT_DIR</code> sets the profile state directory, and
+                <code>PI_WEB_AGENT_SESSION_DIR</code> overrides session storage separately from <code>agent.dir</code>. The
+                legacy <code>PI_CODING_AGENT_DIR</code> and <code>PI_CODING_AGENT_SESSION_DIR</code> names apply only to a
+                canonical Pi companion command; PI WEB never derives ambient environment-variable names from an arbitrary
+                command. Use the explicit <code>PI_WEB_AGENT_*</code> names for alternate commands.
+                <code>PI_WEB_AGENT_DIR</code> is an unconditional override, while a legacy
+                <code>PI_CODING_AGENT_DIR</code> override stops applying when Settings selects an alternate command so the
+                command and directory can transition together.
               </p>
               <p>
-                Session directory overrides are environment-only; use <code>PI_WEB_AGENT_SESSION_DIR</code> unless you are
-                intentionally using the legacy Pi-compatible <code>PI_CODING_AGENT_SESSION_DIR</code> name.
+                The session daemon resolves the persisted desired values plus its environment once at startup. That
+                secret-free active profile stays fixed for the daemon lifetime. <strong>Settings → Session daemon</strong>
+                saves command and directory together as desired configuration and shows whether the profile is active,
+                needs a restart, or cannot be compared. Until the daemon restarts, sessions, Pi package operations,
+                package-backed plugin discovery, status/install detection, and update planning continue to use the
+                daemon-owned active profile; a web/API restart recovers that same active profile instead of applying the
+                newly saved values.
               </p>
               <div class="callout warning">
-                In <strong>Settings → Session daemon</strong>, agent settings are saved on the selected machine. Restart
-                the session daemon on that machine after changing them. The web/API process can display the new config
-                immediately, and status/plugin discovery may re-read it on later requests, but active session runtime
-                ownership is intentionally long-lived.
+                If the session daemon cannot report a valid active profile, profile-dependent package and plugin
+                operations report unavailable instead of falling back to independently resolved config. A package-managed
+                update command is shown only when PI WEB can preserve the active profile with a recognized, safe Pi
+                companion CLI; otherwise the command is omitted. Remote profile editing likewise requires advertised
+                support, and the gateway rejects a remote save if the target does not return the requested profile.
+                Restart the session daemon on the selected machine to establish the next active profile.
               </div>
             </section>
 
@@ -592,24 +609,35 @@
               <h3><code>subsessions</code></h3>
               <p>
                 Boolean. Beta. Controls whether agents receive the tracked-subsession tools:
-                <code>spawn_subsession</code>, <code>list_subsessions</code>, <code>check_subsession</code>, and
-                <code>read_subsession</code>. Defaults to <code>false</code> and also requires <code>spawnSessions</code>
-                to be enabled.
+                <code>spawn_subsession</code>, <code>list_subsessions</code>, <code>check_subsession</code>,
+                <code>read_subsession</code>, and <code>yield_to_subsessions</code>. Defaults to <code>false</code> and also
+                requires <code>spawnSessions</code> to be enabled.
               </p>
               <p>
-                Tracked subsessions let an agent delegate work to child sessions, receive a notification when each child
-                stops working, and inspect their status and transcripts. Calling <code>spawn_subsession</code> returns
-                immediately. The parent can continue independent work while treating every child whose result it needs
-                as pending. Before producing work that depends on those results, the parent reaches a join point and
-                yields until every required child has sent a completion notice.
+                Tracked subsessions are join-oriented. Calling <code>spawn_subsession</code> returns immediately, so the
+                parent can continue independent work while the child runs. Work whose result the parent does not need to
+                join belongs in the fire-and-forget <code>spawn_session</code> tool instead.
               </p>
               <p>
-                A completion notice wakes an idle parent. If the parent is busy, the notice queues until the current
-                turn ends rather than interrupting in-flight work. For multiple required children, each notice resolves
-                one pending child; after processing it, the parent yields again if another required child is pending.
-                <code>list_subsessions</code>, <code>check_subsession</code>, and <code>read_subsession</code> provide
-                on-demand status and transcript inspection for deliberate progress checks or recovery. Completion
-                notifications, rather than polling these tools, are the normal synchronization mechanism.
+                At a join point, after finishing its independent work, the parent calls
+                <code>yield_to_subsessions</code> alone as the final action in its tool batch. Pi ends a tool batch early
+                only when every result in that batch is terminating. If any tracked child is still working, the action
+                ends the current agent run so the parent becomes idle. If none are working, it does not end the run and
+                clearly reports that there is nothing to wait for.
+              </p>
+              <p>
+                A completion notice wakes an idle parent or queues behind in-flight work. Each notice lists any other
+                tracked children still working, so the parent can continue work or call
+                <code>yield_to_subsessions</code> again at the next join point. Further notices arrive automatically; do
+                not poll.
+              </p>
+              <p>
+                <code>list_subsessions</code>, <code>check_subsession</code>, and <code>read_subsession</code> never yield
+                or change control flow. They are for deliberate inspection or recovery, not completion polling. While a
+                child works, agent-facing <code>check_subsession</code> and <code>read_subsession</code> withhold partial
+                output and direct the parent to continue independent work or yield at the join point. Output becomes
+                available when the child stops. In notices and inspection results, PI WEB guidance precedes a labeled
+                marker and the child output or transcript always comes last.
               </p>
               <p>
                 In <strong>Settings → Session daemon</strong>, these keys are saved on the selected machine. Restart the

@@ -30,6 +30,26 @@ describe("PI WEB capabilities", () => {
     })).toContain(PI_WEB_CAPABILITIES.sessionsPersistedState);
   });
 
+  it("requires web and session daemon support for server-side queue clearing", () => {
+    const clearQueue = PI_WEB_CAPABILITIES.sessionsClearQueue;
+    expect(WEB_RUNTIME_CAPABILITIES).toContain(clearQueue);
+    expect(SESSIOND_RUNTIME_CAPABILITIES).toContain(clearQueue);
+    expect(parseKnownPiWebCapabilities([clearQueue, "future.capability"])).toEqual([clearQueue]);
+
+    expect(effectivePiWebCapabilities({
+      web: { available: true, capabilities: [clearQueue] },
+      sessiond: { available: true, capabilities: [] },
+    })).not.toContain(clearQueue);
+    expect(effectivePiWebCapabilities({
+      web: { available: true, capabilities: [] },
+      sessiond: { available: true, capabilities: [clearQueue] },
+    })).not.toContain(clearQueue);
+    expect(effectivePiWebCapabilities({
+      web: { available: true, capabilities: [clearQueue] },
+      sessiond: { available: true, capabilities: [clearQueue] },
+    })).toContain(clearQueue);
+  });
+
   it("keeps only known string capabilities when parsing runtime data", () => {
     expect(parseKnownPiWebCapabilities([PI_WEB_CAPABILITIES.piPackagesManage, PI_WEB_CAPABILITIES.selectedMachineSettings, "future.capability"])).toEqual([PI_WEB_CAPABILITIES.piPackagesManage, PI_WEB_CAPABILITIES.selectedMachineSettings]);
     expect(parseKnownPiWebCapabilities([PI_WEB_CAPABILITIES.piPackagesManage, 1])).toBeUndefined();

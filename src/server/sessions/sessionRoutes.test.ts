@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import fastifyWebsocket from "@fastify/websocket";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { MessagePage, SessionBulkArchiveResponse, SessionBulkDeleteArchivedResponse, SessionBulkMutationRef, SessionCleanupExecuteResponse, SessionCleanupPreviewResponse } from "../../shared/apiTypes.js";
+import type { MessagePage, SessionBulkArchiveResponse, SessionBulkDeleteArchivedResponse, SessionBulkMutationRef, SessionCleanupExecuteResponse, SessionCleanupPreviewResponse, SessionStatus } from "../../shared/apiTypes.js";
 import { SessionEventHub } from "../realtime/sessionEventHub.js";
 import { PiSessionService, type PiSessionManagerGateway } from "./piSessionService.js";
 import type { SessionRouteLookup, SessionRouteService } from "./sessionService.js";
@@ -168,6 +168,55 @@ describe("session routes", () => {
     }
   });
 
+  it("clears a session queue with workspace context and returns fresh status", async () => {
+    const routeApp = Fastify({ logger: false });
+    await routeApp.register(fastifyWebsocket);
+    const eventHub = new SessionEventHub();
+    const routeService = new CapturingRouteSessionService();
+    registerSessionRoutes(routeApp, routeService, eventHub);
+
+    try {
+      const requestCwd = resolve("/repo");
+      const response = await routeApp.inject({ method: "POST", url: "/sessions/session-1/queue/clear", payload: { cwd: requestCwd } });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        sessionId: "session-1",
+        isStreaming: true,
+        isCompacting: false,
+        isBashRunning: false,
+        pendingMessageCount: 0,
+        queuedMessages: [],
+        tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        cost: 0,
+      });
+      expect(routeService.clearQueueCalls).toEqual([{ id: "session-1", cwd: requestCwd }]);
+    } finally {
+      await routeService.dispose();
+      await routeApp.close();
+    }
+  });
+
+  it("maps archived queue-clear failures to a mutation error without requiring a body", async () => {
+    const routeApp = Fastify({ logger: false });
+    await routeApp.register(fastifyWebsocket);
+    const eventHub = new SessionEventHub();
+    const routeService = new CapturingRouteSessionService();
+    routeService.clearQueueError = new Error("Archived sessions are read-only. Restore the session to continue.");
+    registerSessionRoutes(routeApp, routeService, eventHub);
+
+    try {
+      const response = await routeApp.inject({ method: "POST", url: "/sessions/session-1/queue/clear" });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ error: "Archived sessions are read-only. Restore the session to continue." });
+      expect(routeService.clearQueueCalls).toEqual(["session-1"]);
+    } finally {
+      await routeService.dispose();
+      await routeApp.close();
+    }
+  });
+
   it("normalizes cleanup requests for preview and execute routes", async () => {
     const routeApp = Fastify({ logger: false });
     await routeApp.register(fastifyWebsocket);
@@ -255,12 +304,14 @@ describe("session routes", () => {
 class CapturingRouteSessionService implements SessionRouteService {
   readonly calls: unknown[] = [];
   readonly reloadCalls: SessionRouteLookup[] = [];
+  readonly clearQueueCalls: SessionRouteLookup[] = [];
   messagesResponse: unknown[] | MessagePage = [];
   readonly cleanupPreviewCalls: NormalizedSessionCleanupRequest[] = [];
   readonly cleanupCalls: NormalizedSessionCleanupRequest[] = [];
   readonly bulkArchiveCalls: SessionBulkMutationRef[][] = [];
   readonly bulkDeleteCalls: SessionBulkMutationRef[][] = [];
   reloadError: Error | undefined;
+  clearQueueError: Error | undefined;
 
   cleanupPreview(request: NormalizedSessionCleanupRequest): Promise<SessionCleanupPreviewResponse> {
     this.cleanupPreviewCalls.push(request);
@@ -294,6 +345,22 @@ class CapturingRouteSessionService implements SessionRouteService {
 
   list(): never { throw unusedRouteMethod("list"); }
   start(): never { throw unusedRouteMethod("start"); }
+
+  clearQueue(lookup: SessionRouteLookup): Promise<SessionStatus> {
+    this.clearQueueCalls.push(lookup);
+    if (this.clearQueueError !== undefined) return Promise.reject(this.clearQueueError);
+    return Promise.resolve({
+      sessionId: sessionIdFromLookup(lookup),
+      isStreaming: true,
+      isCompacting: false,
+      isBashRunning: false,
+      pendingMessageCount: 0,
+      queuedMessages: [],
+      tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      cost: 0,
+    });
+  }
+
   messages(): Promise<unknown[] | MessagePage> {
     return Promise.resolve(this.messagesResponse);
   }

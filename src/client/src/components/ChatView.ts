@@ -39,6 +39,7 @@ function clampNumber(value: number, min: number, max: number): number {
 }
 
 export interface QueuedMessageSection {
+  source: "client" | "server";
   heading: string;
   detail: string;
   messages: QueuedSessionMessage[];
@@ -46,8 +47,8 @@ export interface QueuedMessageSection {
 
 export function chatQueuedMessageSections(clientQueued: QueuedSessionMessage[], serverQueued: QueuedSessionMessage[]): QueuedMessageSection[] {
   return [
-    clientQueued.length === 0 ? undefined : { heading: "Queued until session starts", detail: "Will send once the backend session is ready", messages: clientQueued },
-    serverQueued.length === 0 ? undefined : { heading: "Queued messages", detail: `${String(serverQueued.length)} pending · Stop clears the queue`, messages: serverQueued },
+    clientQueued.length === 0 ? undefined : { source: "client", heading: "Queued until session starts", detail: "Will send once the backend session is ready", messages: clientQueued },
+    serverQueued.length === 0 ? undefined : { source: "server", heading: "Queued messages", detail: `${String(serverQueued.length)} pending`, messages: serverQueued },
   ].filter((section): section is QueuedMessageSection => section !== undefined);
 }
 
@@ -89,6 +90,8 @@ export class ChatView extends LitElement {
   @property({ attribute: false }) clientQueuedMessages: QueuedSessionMessage[] = [];
   @property({ attribute: false }) status?: SessionStatus;
   @property({ attribute: false }) activity?: SessionActivity;
+  @property({ type: Boolean }) canClearServerQueue = false;
+  @property({ attribute: false }) onClearServerQueue?: () => void;
   @property({ attribute: false }) onLoadMore?: () => void;
   @query(".chat") private chat?: HTMLDivElement;
   @state() private pinnedToBottom = true;
@@ -122,6 +125,9 @@ export class ChatView extends LitElement {
   };
   private readonly onPageHide = () => {
     this.saveScrollPosition();
+  };
+  private readonly handleClearServerQueue = (): void => {
+    this.onClearServerQueue?.();
   };
 
   override connectedCallback(): void {
@@ -261,11 +267,17 @@ export class ChatView extends LitElement {
   }
 
   private renderQueuedMessageList(section: QueuedMessageSection) {
+    const canClear = section.source === "server" && this.canClearServerQueue && this.onClearServerQueue !== undefined;
     return html`
       <aside class="queued-messages" aria-live="polite">
         <div class="queued-header">
-          <strong>${section.heading}</strong>
-          <small>${section.detail}</small>
+          <div class="queued-heading">
+            <strong>${section.heading}</strong>
+            <small>${section.detail}</small>
+          </div>
+          ${canClear ? html`
+            <button type="button" class="queued-clear-button" title="Clear queued messages without stopping active work" @click=${this.handleClearServerQueue}>Clear queue</button>
+          ` : null}
         </div>
         ${section.messages.map((message, index) => html`
           <div class="queued-message">

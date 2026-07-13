@@ -6,6 +6,7 @@ export const PI_WEB_CAPABILITIES = {
   sessionsBulkMutations: "sessions.bulkMutations",
   sessionsCleanup: "sessions.cleanup",
   sessionsReload: "sessions.reload",
+  sessionsClearQueue: "sessions.clearQueue",
   sessionsPersistedState: "sessions.persistedState",
   promptAttachments: "prompt.attachments",
   workspaceFileSuggestions: "workspace.fileSuggestions",
@@ -67,9 +68,9 @@ export interface PiWebUploadsConfig {
 }
 
 export interface PiWebAgentConfig {
-  /** Agent CLI command used for diagnostics and package-managed updates. */
+  /** Pi-compatible companion CLI used for diagnostics and safe package-managed updates. */
   command?: string;
-  /** Agent config/state directory containing auth.json, models.json, settings.json, and sessions/. */
+  /** Pi-compatible profile directory containing auth.json, models.json, settings.json, and sessions/. */
   dir?: string;
 }
 
@@ -94,7 +95,7 @@ export interface PiWebConfigValues {
    * while the capability stabilizes. Requires spawnSessions to be enabled.
    */
   subsessions?: boolean;
-  /** Agent runtime command/state used by PI WEB and the session daemon (Pi by default). */
+  /** Desired Pi-compatible agent profile and companion CLI (Pi by default). */
   agent?: PiWebAgentConfig;
 }
 

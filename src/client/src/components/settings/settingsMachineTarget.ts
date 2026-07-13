@@ -37,13 +37,13 @@ export function agentProfileSettingsSupport(target: SettingsMachineTarget, runti
   if (runtime?.ok !== true) {
     return {
       state: "unknown",
-      message: `Agent profile support could not be verified on ${target.name}. Reload machine status before changing the profile.`,
+      message: `Pi-compatible agent profile support could not be verified on ${target.name}. Reload machine status before changing the profile.`,
     };
   }
   if (supportsPiWebCapability(runtime, PI_WEB_CAPABILITIES.agentProfileConfig)) return { state: "supported" };
   return {
     state: "unsupported",
-    message: `Agent profile settings are not available on ${target.name}. Update and restart PI WEB on that machine, then try again.`,
+    message: `Pi-compatible agent profile settings are not available on ${target.name}. Update and restart PI WEB on that machine, then try again.`,
   };
 }
 

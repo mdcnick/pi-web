@@ -45,7 +45,7 @@ describe("selected-machine settings target helpers", () => {
     expect(agentProfileSettingsSupport({ id: "local", name: "local", kind: "local" }, undefined)).toEqual({ state: "supported" });
     expect(agentProfileSettingsSupport(target, undefined)).toEqual({
       state: "unknown",
-      message: "Agent profile support could not be verified on Lab Mac. Reload machine status before changing the profile.",
+      message: "Pi-compatible agent profile support could not be verified on Lab Mac. Reload machine status before changing the profile.",
     });
     expect(agentProfileSettingsSupport(target, {
       ok: true,
@@ -56,7 +56,7 @@ describe("selected-machine settings target helpers", () => {
     expect(isAgentProfileSettingsSupported(unsupported)).toBe(false);
     expect(unsupported).toEqual({
       state: "unsupported",
-      message: "Agent profile settings are not available on Lab Mac. Update and restart PI WEB on that machine, then try again.",
+      message: "Pi-compatible agent profile settings are not available on Lab Mac. Update and restart PI WEB on that machine, then try again.",
     });
   });
 

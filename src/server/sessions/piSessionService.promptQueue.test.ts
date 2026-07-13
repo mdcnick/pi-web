@@ -222,6 +222,84 @@ describe("PiSessionService prompt, queue, and auth warnings", () => {
     await service.dispose();
   });
 
+  it("clears runtime and compaction queues without interrupting active work", async () => {
+    const steeringMessages = ["adjust this turn"];
+    const followUpMessages = ["then do this"];
+    const transcript = [{ role: "user", content: "keep this history" }];
+    const hub = new CapturingSessionEventHub();
+    const fake = fakeRuntime("clear-queue-session", {
+      messages: transcript,
+      isStreaming: true,
+      isCompacting: true,
+      pendingMessageCount: 2,
+      getSteeringMessages: () => steeringMessages,
+      getFollowUpMessages: () => followUpMessages,
+    });
+    const clearRuntimeQueue = vi.fn(() => {
+      const cleared = { steering: [...steeringMessages], followUp: [...followUpMessages] };
+      steeringMessages.length = 0;
+      followUpMessages.length = 0;
+      fake.session.pendingMessageCount = 0;
+      return cleared;
+    });
+    fake.session.clearQueue = clearRuntimeQueue;
+    const service = new PiSessionService(hub, {
+      agentDir: TEST_AGENT_DIR,
+      createAgentRuntime: runtimeCreator(fake.runtime),
+      sessionManager: sessionGateway([sessionRecord("clear-queue-session")]),
+      heartbeatIntervalMs: 60_000,
+    });
+
+    await service.prompt(sessionRef("clear-queue-session"), "queued during compaction", "followUp");
+    await expect(service.status(sessionRef("clear-queue-session"))).resolves.toMatchObject({
+      isStreaming: true,
+      isCompacting: true,
+      pendingMessageCount: 3,
+      queuedMessages: [
+        { kind: "steer", text: "adjust this turn" },
+        { kind: "followUp", text: "then do this" },
+        { kind: "followUp", text: "queued during compaction" },
+      ],
+    });
+
+    const status = await service.clearQueue(sessionRef("clear-queue-session"));
+
+    expect(clearRuntimeQueue).toHaveBeenCalledOnce();
+    expect(status).toMatchObject({
+      isStreaming: true,
+      isCompacting: true,
+      pendingMessageCount: 0,
+      queuedMessages: [],
+      messageCount: 1,
+    });
+    expect(fake.session.messages).toBe(transcript);
+    expect(fake.calls.prompt).toEqual([]);
+    expect(fake.calls.abort).toBe(0);
+    expect(fake.calls.dispose).toBe(0);
+    const publishedStatuses = hub.sessionEvents.filter(({ event }) => event.type === "status.update");
+    expect(publishedStatuses.at(-1)?.event).toEqual({ type: "status.update", status });
+    await service.dispose();
+  });
+
+  it("clears an already-empty queue idempotently", async () => {
+    const fake = fakeRuntime("clear-empty-queue-session");
+    const service = new PiSessionService(new CapturingSessionEventHub(), {
+      agentDir: TEST_AGENT_DIR,
+      createAgentRuntime: runtimeCreator(fake.runtime),
+      sessionManager: sessionGateway([sessionRecord("clear-empty-queue-session")]),
+      heartbeatIntervalMs: 60_000,
+    });
+
+    const firstStatus = await service.clearQueue(sessionRef("clear-empty-queue-session"));
+    const secondStatus = await service.clearQueue(sessionRef("clear-empty-queue-session"));
+
+    expect(fake.calls.clearQueue).toBe(2);
+    expect(fake.calls.abort).toBe(0);
+    expect(firstStatus).toMatchObject({ pendingMessageCount: 0, queuedMessages: [] });
+    expect(secondStatus).toMatchObject({ pendingMessageCount: 0, queuedMessages: [] });
+    await service.dispose();
+  });
+
   it("clears queued messages when aborting active work", async () => {
     const fake = fakeRuntime("abort-session");
     const service = new PiSessionService(new CapturingSessionEventHub(), {

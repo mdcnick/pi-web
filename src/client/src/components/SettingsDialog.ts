@@ -437,7 +437,7 @@ export class SettingsDialog extends LitElement {
     if (config.agent !== undefined) {
       const profileSupport = this.agentProfileSettingsSupport(target);
       if (!isAgentProfileSettingsSupported(profileSupport)) {
-        this.sessiondError = profileSupport.message ?? `Agent profile settings are not available on ${settingsMachineTargetLabel(target)}.`;
+        this.sessiondError = profileSupport.message ?? `Pi-compatible agent profile settings are not available on ${settingsMachineTargetLabel(target)}.`;
         return;
       }
     }
