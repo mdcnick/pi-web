@@ -187,9 +187,9 @@ Tracked subsessions are join-oriented. Calling `spawn_subsession` returns immedi
 
 At a join point, after finishing its independent work, the parent calls `yield_to_subsessions` alone as the final action in its tool batch. Pi ends a tool batch early only when every result in that batch is terminating. If any tracked child is still working, the action ends the current agent run so the parent becomes idle. If none are working, it does not end the run and clearly reports that there is nothing to wait for.
 
-A completion notice automatically wakes an idle parent. If the parent is busy, the notice queues until the current turn ends rather than interrupting in-flight work. When multiple children finish at different times, the parent handles each completion and calls `yield_to_subsessions` again while another child is still working.
+A completion notice wakes an idle parent or queues behind in-flight work. Each notice lists any other tracked children still working, so the parent can continue work or call `yield_to_subsessions` again at the next join point. Further notices arrive automatically; do not poll.
 
-`list_subsessions`, `check_subsession`, and `read_subsession` never yield or change control flow and are not completion-polling mechanisms. They remain available for deliberate inspection or recovery. While a child is working, agent-facing `check_subsession` and `read_subsession` withhold partial output and transcript entries and instead direct the parent to continue independent work or yield at the join point. Once the child is no longer working, its output and transcript are available. Completion notifications, rather than polling inspection tools, are the normal synchronization mechanism.
+`list_subsessions`, `check_subsession`, and `read_subsession` never yield or change control flow. They are for deliberate inspection or recovery, not completion polling. While a child works, agent-facing `check_subsession` and `read_subsession` withhold partial output and direct the parent to continue independent work or yield at the join point. Output becomes available when the child stops.
 
 In **Settings → Session daemon**, these keys are saved on the selected machine. Restart the session daemon on that machine after changing them.
 

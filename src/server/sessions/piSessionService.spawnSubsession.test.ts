@@ -8,10 +8,15 @@ import { CapturingSessionEventHub, emptyArchiveStore, fakeRuntime, fakeSessionMa
 
 describe("PiSessionService", () => {
   describe("spawnSubsession", () => {
-    function subsessionService(decision: SpawnTargetDecision, heartbeatIntervalMs = 60_000) {
+    function subsessionService(decision: SpawnTargetDecision, heartbeatIntervalMs = 60_000, childIds = ["child-1"]) {
       const parent = fakeRuntime("parent-1", { sessionFile: "/tmp/parent-1.jsonl" });
-      const child = fakeRuntime("child-1", { sessionFile: "/tmp/child-1.jsonl", sessionManager: fakeSessionManager("/workspace-feature") });
-      const created = [parent.runtime, child.runtime];
+      const children = childIds.map((childId) => fakeRuntime(childId, {
+        sessionFile: `/tmp/${childId}.jsonl`,
+        sessionManager: fakeSessionManager("/workspace-feature"),
+      }));
+      const child = children[0];
+      if (child === undefined) throw new Error("At least one child fixture is required");
+      const created = [parent.runtime, ...children.map(({ runtime }) => runtime)];
       let index = 0;
       const createAgentRuntime: RuntimeCreator = async () => {
         await Promise.resolve();
@@ -38,7 +43,7 @@ describe("PiSessionService", () => {
         spawnTargets: { resolveSpawnTarget: () => Promise.resolve(decision) },
         heartbeatIntervalMs,
       });
-      return { parent, child, service };
+      return { parent, child, children, service };
     }
 
     it("records the parent, delivers the prompt, and lists the tracked child", async () => {
@@ -774,6 +779,41 @@ describe("PiSessionService", () => {
       expect(parent.calls.sendCustomMessage[0]?.message.customType).toBe("subsession.completion");
       expect(parent.calls.sendCustomMessage[0]?.options).toEqual({ triggerTurn: true, deliverAs: "followUp" });
       expect(parent.calls.prompt).toHaveLength(0); // not a user-authored message
+      await service.dispose();
+    });
+
+    it("reports other working children in each completion notice", async () => {
+      const { parent, children, service } = subsessionService(
+        { allowed: true, cwd: "/workspace-feature" },
+        60_000,
+        ["child-1", "child-2"],
+      );
+      const [first, second] = children;
+      if (first === undefined || second === undefined) throw new Error("Expected two child fixtures");
+      await service.start("/workspace");
+      await service.spawnSubsession({ spawningCwd: "/workspace", parentSessionId: "parent-1", parentSessionFile: "/tmp/parent-1.jsonl", prompt: "first", cwd: "/workspace-feature" });
+      await service.spawnSubsession({ spawningCwd: "/workspace", parentSessionId: "parent-1", parentSessionFile: "/tmp/parent-1.jsonl", prompt: "second", cwd: "/workspace-feature" });
+
+      first.session.isStreaming = true;
+      first.emit({ type: "agent_start" });
+      second.session.isStreaming = true;
+      second.emit({ type: "agent_start" });
+
+      first.session.isStreaming = false;
+      first.emit({ type: "agent_end" });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(parent.calls.sendCustomMessage[0]?.message.content).toBe(
+        "Subsession child-1 stopped working (idle). Latest output:\n\n(no output)\n\nStill working: child-2. Continue working, or call yield_to_subsessions alone and last at the next join point. Further completion notices arrive automatically; do not poll.",
+      );
+
+      second.session.isStreaming = false;
+      second.emit({ type: "agent_end" });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(parent.calls.sendCustomMessage[1]?.message.content).toBe(
+        "Subsession child-2 stopped working (idle). Latest output:\n\n(no output)\n\nNo other tracked subsessions are working.",
+      );
       await service.dispose();
     });
 

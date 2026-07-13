@@ -67,10 +67,10 @@ export interface SubsessionToolDeps {
 
 const SpawnSubsessionParams = Type.Object({
   prompt: Type.String({
-    description: "The first instruction to send to the new tracked subsession.",
+    description: "Initial instruction for the tracked child.",
   }),
   cwd: Type.Optional(Type.String({
-    description: "Working directory for the subsession. Must be a workspace (worktree, or root) of the same project as this session. Defaults to this session's working directory.",
+    description: "Child workspace in the same project (worktree or root); defaults to the parent's directory.",
   })),
 });
 
@@ -79,39 +79,39 @@ const YieldToSubsessionsParams = Type.Object({});
 
 const CheckSubsessionParams = Type.Object({
   sessionId: Type.String({
-    description: "Id of a tracked subsession owned by the calling session, as returned by spawn_subsession or list_subsessions.",
+    description: "Tracked child id from spawn_subsession or list_subsessions.",
   }),
 });
 
 const ReadSubsessionParams = Type.Object({
   sessionId: Type.String({
-    description: "Id of a tracked subsession owned by the calling session, as returned by spawn_subsession or list_subsessions.",
+    description: "Tracked child id from spawn_subsession or list_subsessions.",
   }),
   roles: Type.Optional(Type.Array(
     Type.Union([Type.Literal("assistant"), Type.Literal("user"), Type.Literal("tool"), Type.Literal("system"), Type.Literal("custom")]),
-    { description: "Message roles to include. Omit for all roles." },
+    { description: "Roles to include; omit for all." },
   )),
   include: Type.Optional(Type.Array(
     Type.Union([Type.Literal("text"), Type.Literal("thinking"), Type.Literal("tool_call"), Type.Literal("tool_result"), Type.Literal("image")]),
-    { description: "Content kinds to keep within messages. Omit for all kinds." },
+    { description: "Content kinds to include; omit for all." },
   )),
   search: Type.Optional(Type.String({
-    description: "Case-insensitive substring; keep only messages whose text or tool name matches. Always searches full message content, even when maxChars is set.",
+    description: "Case-insensitive text or tool-name substring; searches full content before maxChars truncation.",
   })),
   maxChars: Type.Optional(Type.Integer({
     minimum: 0,
-    description: "Truncate each text/thinking/tool-result value to this many characters; clipped parts are marked '[+N chars truncated]'. Omit for full, untruncated text (there is no default, so truncation only happens when you ask for it).",
+    description: "Maximum characters per text, thinking, or tool-result value; omit for no truncation.",
   })),
   includeToolArgs: Type.Optional(Type.Boolean({
-    description: "Include raw tool-call arguments (can be large). A compact one-line summary of each call is always shown regardless.",
+    description: "Include raw tool-call arguments; summaries are always included.",
   })),
   before: Type.Optional(Type.Integer({
     minimum: 0,
-    description: "Return only messages before this transcript index; page backward by passing the previous response's 'start'.",
+    description: "Return messages before this index; use the previous start to page backward.",
   })),
   limit: Type.Optional(Type.Integer({
     minimum: 1,
-    description: "Maximum number of most-recent matching messages to return within the window (returned in chronological order). Defaults to 50.",
+    description: "Maximum recent matches, in chronological order. Defaults to 50.",
   })),
 });
 
@@ -120,7 +120,7 @@ function statusLine(summary: SubsessionSummary): string {
 }
 
 function workingInspectionGuidance(sessionId: string): string {
-  return `Subsession ${sessionId} is still working, so partial output is unavailable through agent-facing inspection. Continue independent work, or at the join point call yield_to_subsessions alone as the final action in its tool batch. Completion notifications wake the parent automatically; do not poll list_subsessions, check_subsession, or read_subsession.`;
+  return `Subsession ${sessionId} is working; partial output is withheld. Continue independent work, or call yield_to_subsessions alone and last at the join point. Completion notices wake you; do not poll.`;
 }
 
 function renderEntry(entry: TranscriptEntry): string {
@@ -184,8 +184,8 @@ export function createSubsessionToolDefinitions(spawningCwd: string, deps: Subse
   const spawnTool = defineTool<typeof SpawnSubsessionParams, SpawnSubsessionResult>({
     name: "spawn_subsession",
     label: "Spawn subsession",
-    description: "Start a tracked child and return after dispatch. Tracked children are join-oriented: continue independent work, then call yield_to_subsessions at the join point. Completion notifications wake the parent automatically; do not poll.",
-    promptSnippet: "spawn_subsession: delegate join-oriented work; continue independently, then use yield_to_subsessions at the join point",
+    description: "Start a tracked child and return immediately. Continue independent work, then use yield_to_subsessions at the join point. Completion notices wake you; do not poll.",
+    promptSnippet: "spawn_subsession: tracked parallel work; continue, then join with yield_to_subsessions",
     parameters: SpawnSubsessionParams,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const parentSessionId = ctx.sessionManager.getSessionId();
@@ -199,7 +199,7 @@ export function createSubsessionToolDefinitions(spawningCwd: string, deps: Subse
         ...(ctx.model === undefined ? {} : { model: ctx.model }),
       });
       return {
-        content: [{ type: "text", text: `Started tracked subsession ${result.sessionId} in ${result.cwd}. Continue independent work, then at the join point call yield_to_subsessions rather than polling for completion.` }],
+        content: [{ type: "text", text: `Started tracked subsession ${result.sessionId} in ${result.cwd}. Continue independent work, then join with yield_to_subsessions; do not poll.` }],
         details: result,
       };
     },
@@ -208,8 +208,8 @@ export function createSubsessionToolDefinitions(spawningCwd: string, deps: Subse
   const listTool = defineTool<typeof ListSubsessionsParams, { subsessions: SubsessionSummary[] }>({
     name: "list_subsessions",
     label: "List subsessions",
-    description: "Return tracked child statuses for deliberate inspection. This never yields or changes control flow and is not a completion-polling mechanism.",
-    promptSnippet: "list_subsessions: deliberately inspect tracked child status without yielding",
+    description: "List tracked child statuses. Never yields or changes control flow; do not poll.",
+    promptSnippet: "list_subsessions: inspect child statuses; never yields",
     parameters: ListSubsessionsParams,
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const parentSessionId = ctx.sessionManager.getSessionId();
@@ -225,8 +225,8 @@ export function createSubsessionToolDefinitions(spawningCwd: string, deps: Subse
   const checkTool = defineTool<typeof CheckSubsessionParams, SubsessionCheckResult>({
     name: "check_subsession",
     label: "Check subsession",
-    description: "Return status, message count, and latest output for a non-working tracked child. A working child returns guidance instead of partial output. This never yields or changes control flow.",
-    promptSnippet: "check_subsession: inspect a non-working child's latest output without yielding",
+    description: "Get a tracked child's status and latest output. Working output is withheld. Never yields; do not poll.",
+    promptSnippet: "check_subsession: inspect child status and available output; never yields",
     parameters: CheckSubsessionParams,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const parentSessionId = ctx.sessionManager.getSessionId();
@@ -246,8 +246,8 @@ export function createSubsessionToolDefinitions(spawningCwd: string, deps: Subse
   const readTool = defineTool<typeof ReadSubsessionParams, SubsessionReadResult>({
     name: "read_subsession",
     label: "Read subsession",
-    description: "Return a filtered, paginated transcript for a non-working tracked child. A working child returns guidance instead of partial transcript entries. This never yields or changes control flow.",
-    promptSnippet: "read_subsession: inspect a non-working child's transcript without yielding",
+    description: "Read a tracked child's filtered transcript. Working transcripts are withheld. Never yields; do not poll.",
+    promptSnippet: "read_subsession: inspect an available child transcript; never yields",
     parameters: ReadSubsessionParams,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const parentSessionId = ctx.sessionManager.getSessionId();
@@ -267,12 +267,12 @@ export function createSubsessionToolDefinitions(spawningCwd: string, deps: Subse
   const yieldTool = defineTool<typeof YieldToSubsessionsParams, { subsessions: SubsessionSummary[] }>({
     name: "yield_to_subsessions",
     label: "Yield to subsessions",
-    description: "End the current agent run at a tracked-subsession join point when any child is still working, allowing completion notifications to wake the parent. If none are working, remain active and report that there is nothing to wait for. Call alone as the final action in its tool batch; do not poll.",
-    promptSnippet: "yield_to_subsessions: at a join point, end this run while tracked children work; call alone as the final tool action",
+    description: "At a join point, end this run while tracked children work; completion notices wake you. If none work, continue. Call alone and last; do not poll.",
+    promptSnippet: "yield_to_subsessions: end the run at a join point; call alone and last",
     promptGuidelines: [
-      "Use yield_to_subsessions only at a join point after all independent parent work is done; tracked subsessions are join-oriented, while optional fire-and-forget work belongs in spawn_session.",
-      "Call yield_to_subsessions alone as the final action in its tool batch. Pi ends the run only when every finalized result in that batch is terminating.",
-      "Do not poll list_subsessions, check_subsession, or read_subsession for completion; completion notifications wake the parent automatically.",
+      "After independent work, yield only at a join point; use spawn_session for fire-and-forget work.",
+      "Call alone and last; a mixed tool batch may continue the run.",
+      "Completion notices wake you; do not poll inspection tools.",
     ],
     parameters: YieldToSubsessionsParams,
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
@@ -282,12 +282,12 @@ export function createSubsessionToolDefinitions(spawningCwd: string, deps: Subse
       const working = subsessions.filter(({ status }) => status === "working");
       if (working.length === 0) {
         return {
-          content: [{ type: "text", text: "No tracked subsessions are currently working. Nothing was yielded; continue without waiting." }],
+          content: [{ type: "text", text: "No tracked subsessions are working; continuing." }],
           details: { subsessions },
         };
       }
       return {
-        content: [{ type: "text", text: `Yielding to working tracked subsessions: ${working.map(({ sessionId }) => sessionId).join(", ")}. The current agent run is ending; completion notifications will wake the parent as children stop working.` }],
+        content: [{ type: "text", text: `Working: ${working.map(({ sessionId }) => sessionId).join(", ")}. Ending this run; completion notices will wake you.` }],
         details: { subsessions },
         terminate: true,
       };

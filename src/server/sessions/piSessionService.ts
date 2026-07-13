@@ -898,6 +898,16 @@ export class PiSessionService {
     return "idle";
   }
 
+  private workingSubsessionIds(parentSessionId: string): string[] {
+    const childIds = this.subsessionChildren.get(parentSessionId);
+    if (childIds === undefined) return [];
+    return [...childIds].filter((childId) => {
+      const link = this.subsessionLinks.get(childId);
+      const active = link === undefined ? undefined : this.activeChildForSubsessionLink(link);
+      return active !== undefined && this.hasActiveWork(active.runtime.session);
+    });
+  }
+
   /**
    * Drive parent notifications from a tracked child's status. Arms a pending
    * notification while the child is working, and when it stops fires a single
@@ -917,7 +927,11 @@ export class PiSessionService {
     const status: SubsessionStatus = this.activities.get(childId)?.phase === "error" ? "error" : "idle";
     const finalText = finalAssistantText(historyMessages(session));
     const preview = finalText === "" ? "(no output)" : truncateForNotification(finalText);
-    const text = `Subsession ${childId} stopped working (status: ${status}). Latest output:\n\n${preview}\n\nStatus and latest output are available through check_subsession with sessionId "${childId}"; its full transcript is available through read_subsession.`;
+    const workingIds = this.workingSubsessionIds(link.parentSessionId);
+    const next = workingIds.length === 0
+      ? "No other tracked subsessions are working."
+      : `Still working: ${workingIds.join(", ")}. Continue working, or call yield_to_subsessions alone and last at the next join point. Further completion notices arrive automatically; do not poll.`;
+    const text = `Subsession ${childId} stopped working (${status}). Latest output:\n\n${preview}\n\n${next}`;
     void this.notifyParentOfSubsession(link.parentSessionId, childId, text);
   }
 

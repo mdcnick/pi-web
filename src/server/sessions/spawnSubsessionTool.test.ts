@@ -35,7 +35,7 @@ function tools(deps: Partial<SubsessionToolDeps>) {
 }
 
 function workingGuidance(sessionId: string): string {
-  return `Subsession ${sessionId} is still working, so partial output is unavailable through agent-facing inspection. Continue independent work, or at the join point call yield_to_subsessions alone as the final action in its tool batch. Completion notifications wake the parent automatically; do not poll list_subsessions, check_subsession, or read_subsession.`;
+  return `Subsession ${sessionId} is working; partial output is withheld. Continue independent work, or call yield_to_subsessions alone and last at the join point. Completion notices wake you; do not poll.`;
 }
 
 function firstText(content: readonly (TextContent | ImageContent)[]): string {
@@ -67,34 +67,34 @@ describe("createSubsessionToolDefinitions", () => {
       spawn: vi.fn(() => Promise.resolve({ sessionId: "child-1", cwd: "/repos/a-feature" })),
     });
 
-    expect(spawnTool.description).toBe("Start a tracked child and return after dispatch. Tracked children are join-oriented: continue independent work, then call yield_to_subsessions at the join point. Completion notifications wake the parent automatically; do not poll.");
-    expect(spawnTool.promptSnippet).toBe("spawn_subsession: delegate join-oriented work; continue independently, then use yield_to_subsessions at the join point");
+    expect(spawnTool.description).toBe("Start a tracked child and return immediately. Continue independent work, then use yield_to_subsessions at the join point. Completion notices wake you; do not poll.");
+    expect(spawnTool.promptSnippet).toBe("spawn_subsession: tracked parallel work; continue, then join with yield_to_subsessions");
 
     const result = await spawnTool.execute("call-contract", { prompt: "do it" }, undefined, undefined, ctxFor("parent-1", undefined));
-    expect(firstText(result.content)).toBe("Started tracked subsession child-1 in /repos/a-feature. Continue independent work, then at the join point call yield_to_subsessions rather than polling for completion.");
+    expect(firstText(result.content)).toBe("Started tracked subsession child-1 in /repos/a-feature. Continue independent work, then join with yield_to_subsessions; do not poll.");
   });
 
   it("distinguishes status inspection from yielding in tool metadata", () => {
     const definitions = tools({});
 
-    expect(definitions.list.description).toBe("Return tracked child statuses for deliberate inspection. This never yields or changes control flow and is not a completion-polling mechanism.");
-    expect(definitions.list.promptSnippet).toBe("list_subsessions: deliberately inspect tracked child status without yielding");
-    expect(definitions.check.description).toBe("Return status, message count, and latest output for a non-working tracked child. A working child returns guidance instead of partial output. This never yields or changes control flow.");
-    expect(definitions.check.promptSnippet).toBe("check_subsession: inspect a non-working child's latest output without yielding");
-    expect(definitions.read.description).toBe("Return a filtered, paginated transcript for a non-working tracked child. A working child returns guidance instead of partial transcript entries. This never yields or changes control flow.");
-    expect(definitions.read.promptSnippet).toBe("read_subsession: inspect a non-working child's transcript without yielding");
+    expect(definitions.list.description).toBe("List tracked child statuses. Never yields or changes control flow; do not poll.");
+    expect(definitions.list.promptSnippet).toBe("list_subsessions: inspect child statuses; never yields");
+    expect(definitions.check.description).toBe("Get a tracked child's status and latest output. Working output is withheld. Never yields; do not poll.");
+    expect(definitions.check.promptSnippet).toBe("check_subsession: inspect child status and available output; never yields");
+    expect(definitions.read.description).toBe("Read a tracked child's filtered transcript. Working transcripts are withheld. Never yields; do not poll.");
+    expect(definitions.read.promptSnippet).toBe("read_subsession: inspect an available child transcript; never yields");
   });
 
   it("registers the parameterless yield action with terminal-batch guidance", () => {
     const { yield: yieldTool } = tools({});
 
     expect(yieldTool.parameters).toMatchObject({ type: "object", properties: {} });
-    expect(yieldTool.description).toBe("End the current agent run at a tracked-subsession join point when any child is still working, allowing completion notifications to wake the parent. If none are working, remain active and report that there is nothing to wait for. Call alone as the final action in its tool batch; do not poll.");
-    expect(yieldTool.promptSnippet).toBe("yield_to_subsessions: at a join point, end this run while tracked children work; call alone as the final tool action");
+    expect(yieldTool.description).toBe("At a join point, end this run while tracked children work; completion notices wake you. If none work, continue. Call alone and last; do not poll.");
+    expect(yieldTool.promptSnippet).toBe("yield_to_subsessions: end the run at a join point; call alone and last");
     expect(yieldTool.promptGuidelines).toEqual([
-      "Use yield_to_subsessions only at a join point after all independent parent work is done; tracked subsessions are join-oriented, while optional fire-and-forget work belongs in spawn_session.",
-      "Call yield_to_subsessions alone as the final action in its tool batch. Pi ends the run only when every finalized result in that batch is terminating.",
-      "Do not poll list_subsessions, check_subsession, or read_subsession for completion; completion notifications wake the parent automatically.",
+      "After independent work, yield only at a join point; use spawn_session for fire-and-forget work.",
+      "Call alone and last; a mixed tool batch may continue the run.",
+      "Completion notices wake you; do not poll inspection tools.",
     ]);
   });
 
@@ -151,7 +151,7 @@ describe("createSubsessionToolDefinitions", () => {
 
     expect(list).toHaveBeenCalledWith("parent-1", "/sessions/parent-1.jsonl");
     expect(result.details).toEqual({ subsessions });
-    expect(firstText(result.content)).toBe("Yielding to working tracked subsessions: child-1, child-3. The current agent run is ending; completion notifications will wake the parent as children stop working.");
+    expect(firstText(result.content)).toBe("Working: child-1, child-3. Ending this run; completion notices will wake you.");
     expect(result.terminate).toBe(true);
   });
 
@@ -171,7 +171,7 @@ describe("createSubsessionToolDefinitions", () => {
     const result = await yieldTool.execute("call-no-yield", {}, undefined, undefined, ctxFor("parent-1", undefined));
 
     expect(result.details).toEqual({ subsessions });
-    expect(firstText(result.content)).toBe("No tracked subsessions are currently working. Nothing was yielded; continue without waiting.");
+    expect(firstText(result.content)).toBe("No tracked subsessions are working; continuing.");
     expect(result.terminate).toBeUndefined();
   });
 

@@ -2,4 +2,4 @@
 "@jmfederico/pi-web": patch
 ---
 
-Add an explicit tracked-subsession yield action so parents can end their run at join points and resume from completion notifications without polling or reading partial child output.
+Add explicit tracked-subsession yielding, with wake-up notices that identify children still working so parents can continue or yield again without polling or reading partial output.
