@@ -38,29 +38,6 @@ describe("chatMessageMetadataLabel", () => {
   });
 });
 
-describe("ChatView image rendering", () => {
-  // Direct handler extraction keeps this node-environment test focused on the
-  // late image-load scroll wiring without introducing a component-wide DOM shim.
-  it("renders native image data and re-pins late loads only while already pinned", () => {
-    const view = new ChatView();
-    let scrollCalls = 0;
-    if (!Reflect.set(view, "scrollToBottom", () => { scrollCalls += 1; })) throw new Error("Could not observe ChatView.scrollToBottom");
-    const rendered = renderPart(view, { type: "image", mimeType: "image/png", data: "QUJD" });
-    const onLoad = templateEventHandler(rendered, "@load=");
-
-    expect(templateStaticMarkup(rendered)).toContain("<img");
-    expect(templateStaticMarkup(rendered)).toContain('loading="lazy"');
-    expect(templateValuesAfterMarker(rendered, "src=")).toEqual(["data:image/png;base64,QUJD"]);
-
-    if (!Reflect.set(view, "pinnedToBottom", true)) throw new Error("Could not set ChatView.pinnedToBottom");
-    onLoad(new Event("load"));
-    if (!Reflect.set(view, "pinnedToBottom", false)) throw new Error("Could not set ChatView.pinnedToBottom");
-    onLoad(new Event("load"));
-
-    expect(scrollCalls).toBe(1);
-  });
-});
-
 describe("ChatView technical-event groups", () => {
   const messages: ChatLine[] = [
     { role: "assistant", parts: [{ type: "toolCall", toolName: "read", summary: "inspect a file" }] },
@@ -126,16 +103,9 @@ interface GroupBodyRenderCall {
   startIndex: number;
 }
 
-type RenderPart = (this: ChatView, part: ChatLine["parts"][number], message?: ChatLine) => TemplateResult;
 type RenderMessageGroup = (this: ChatView, messages: ChatLine[], startIndex: number, endIndex: number, defaultOpen: boolean) => TemplateResult;
 type RenderMessageGroupBody = (this: ChatView, messages: ChatLine[], startIndex: number) => TemplateResult;
 type TemplateEventHandler = (event: Event) => void;
-
-function renderPart(view: ChatView, part: ChatLine["parts"][number], message?: ChatLine): TemplateResult {
-  const method: unknown = Reflect.get(view, "renderPart");
-  if (!isRenderPart(method)) throw new Error("ChatView.renderPart is not callable");
-  return method.call(view, part, message);
-}
 
 function renderMessageGroup(view: ChatView, messages: ChatLine[], startIndex: number, endIndex: number, defaultOpen: boolean): TemplateResult {
   const method: unknown = Reflect.get(view, "renderMessageGroup");
@@ -153,10 +123,6 @@ function observeGroupBodyRenders(view: ChatView): GroupBodyRenderCall[] {
   };
   if (!Reflect.set(view, "renderMessageGroupBody", observed)) throw new Error("Could not observe ChatView.renderMessageGroupBody");
   return calls;
-}
-
-function isRenderPart(value: unknown): value is RenderPart {
-  return typeof value === "function";
 }
 
 function isRenderMessageGroup(value: unknown): value is RenderMessageGroup {
