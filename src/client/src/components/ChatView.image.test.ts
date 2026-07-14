@@ -27,7 +27,7 @@ describe("ChatView image rendering", () => {
 
   // Direct rendering keeps this node-environment test focused on the dedicated
   // tool-image presentation without introducing a component-wide DOM shim.
-  it("renders tool images as compact labeled output with final metadata", () => {
+  it("renders tool images as labeled standard messages with final metadata", () => {
     const message: ChatLine = {
       role: "tool",
       parts: [{ type: "image", mimeType: "image/png", data: "QUJD" }],
